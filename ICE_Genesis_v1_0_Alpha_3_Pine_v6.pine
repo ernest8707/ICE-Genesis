@@ -1,0 +1,992 @@
+//@version=6
+indicator(
+     "ICE Genesis v1.0 Alpha 3 - Professional Structure Rendering",
+     shorttitle = "ICE Genesis",
+     overlay = true,
+     max_labels_count = 250,
+     max_lines_count = 200,
+     max_boxes_count = 100
+)
+
+//------------------------------------------------------------------------------
+// IMPORTANT
+// v1.0 Alpha 3 foundation:
+// - The Alpha 2 liquidity engine is preserved.
+// - BOS and CHoCH rendering is rebuilt for immediate chart readability.
+// - Structure lines begin at the broken swing and extend beyond the break candle.
+// - Internal and external events receive separate visual strength and history controls.
+// - Tiny labels sit directly on their dashed structure line without label boxes.
+//
+// ICE Genesis is a rules-based approximation of ICT/SMC concepts.
+// It does not predict price and should be validated with replay/backtesting.
+//------------------------------------------------------------------------------
+
+//=============================================================================
+// 1. INPUTS
+//=============================================================================
+groupCore      = "1. Core"
+groupBias      = "2. Higher-Timeframe Bias"
+groupStructure = "3. Structure"
+groupLiquidity = "4. Liquidity"
+groupDisp      = "5. Displacement"
+groupZones     = "6. Order Block / FVG"
+groupTime      = "7. Time Alignment"
+groupRisk      = "8. Trade Plan"
+groupVisual    = "9. Visuals"
+
+showDashboard   = input.bool(true, "Show dashboard", group = groupCore)
+minimumScore    = input.int(75, "Minimum setup score", minval = 0, maxval = 100, step = 5, group = groupCore)
+maxLabels       = input.int(14, "Maximum structure labels", minval = 2, maxval = 50, group = groupCore)
+maxLiquidityMarks = input.int(4, "Maximum liquidity marks", minval = 1, maxval = 20, group = groupCore)
+
+biasTimeframe   = input.timeframe("240", "Primary bias timeframe", group = groupBias)
+confirmTimeframe = input.timeframe("60", "Confirmation timeframe", group = groupBias)
+biasMode        = input.string("EMA + Structure", "Bias method",
+     options = ["EMA", "Structure", "EMA + Structure"], group = groupBias)
+showHTFLevels   = input.bool(false, "Show HTF protected levels", group = groupBias)
+
+internalLen     = input.int(3, "Internal swing strength", minval = 2, maxval = 20, group = groupStructure)
+externalLen     = input.int(8, "External swing strength", minval = 3, maxval = 50, group = groupStructure)
+requireCloseBreak = input.bool(true, "Require candle close through structure", group = groupStructure)
+requireSweepBeforeMSS = input.bool(true, "Require liquidity sweep before MSS / CHoCH", group = groupStructure)
+requireSweepBeforeBOS = input.bool(true, "Require liquidity sweep before BOS", group = groupStructure)
+useInternalSweepGate = input.bool(true, "Include internal liquidity sweeps", group = groupStructure)
+sweepToBreakBars = input.int(24, "Maximum bars from sweep to MSS/BOS", minval = 1, maxval = 200, group = groupStructure)
+showInternalEvents = input.bool(true, "Show internal BOS / MSS", group = groupStructure)
+showExternalEvents = input.bool(true, "Show external BOS", group = groupStructure)
+
+showPDLevels    = input.bool(true, "Show previous-day high / low", group = groupLiquidity)
+showPWLevels    = input.bool(false, "Show previous-week high / low", group = groupLiquidity)
+showSweepMarks  = input.bool(true, "Show completed liquidity sweeps", group = groupLiquidity)
+showInternalLiquidity = input.bool(true, "Track internal BSL / SSL", group = groupLiquidity)
+showExternalLiquidity = input.bool(true, "Track external BSL / SSL", group = groupLiquidity)
+useEqualLiquidity = input.bool(true, "Track persistent EQH / EQL", group = groupLiquidity)
+equalToleranceATR = input.float(0.10, "Equal-level tolerance × ATR", minval = 0.01, step = 0.01, group = groupLiquidity)
+liquiditySweepMode = input.string("Wick Rejection", "Sweep confirmation", options = ["Wick Rejection", "Any Trade Through"], group = groupLiquidity)
+showUntouchedEqualLevels = input.bool(true, "Show untouched EQH / EQL", group = groupLiquidity)
+maxEqualLevels = input.int(6, "Maximum active EQH / EQL levels", minval = 1, maxval = 20, group = groupLiquidity)
+
+atrLength       = input.int(14, "ATR length", minval = 1, group = groupDisp)
+bodyATR         = input.float(0.65, "Minimum body × ATR", minval = 0.10, step = 0.05, group = groupDisp)
+bodyPercentMin  = input.float(60.0, "Minimum body % of candle range", minval = 10, maxval = 100, step = 5, group = groupDisp)
+requireFVGOnDisplacement = input.bool(true, "Require FVG with displacement", group = groupDisp)
+displacementMemoryBars = input.int(12, "Remember displacement for dashboard (bars)", minval = 1, maxval = 100, group = groupDisp)
+
+showOrderBlock  = input.bool(true, "Show validated order-block zones", group = groupZones)
+showFVG         = input.bool(true, "Show newest qualified FVG", group = groupZones)
+maxOBZones      = input.int(6, "Maximum visible order-block zones", minval = 1, maxval = 20, group = groupZones)
+obZoneOpacity   = input.int(78, "Order-block fill transparency", minval = 50, maxval = 95, group = groupZones)
+obBorderWidth   = input.int(2, "Order-block border width", minval = 1, maxval = 4, group = groupZones)
+showOBPriceText = input.bool(true, "Show OB type and price range inside zone", group = groupZones)
+obSearchBars    = input.int(12, "Search back for order-block candle", minval = 2, maxval = 50, group = groupZones)
+useBodyForOB    = input.bool(false, "Use candle body for OB boundaries", group = groupZones)
+deleteMitigated = input.bool(true, "Delete mitigated zones", group = groupZones)
+requireFVGForSetup = input.bool(true, "Require FVG for qualified setup", group = groupZones)
+requireOBFVGOverlap = input.bool(true, "Require order block / FVG overlap", group = groupZones)
+obMitigationMode = input.string("Touch", "Order-block mitigation method",
+     options = ["Touch", "Midpoint", "Full"], group = groupZones)
+
+useSessionFilter = input.bool(true, "Use session filter", group = groupTime)
+tradeSession     = input.session("0930-1130", "Trading window", group = groupTime)
+sessionTimezone  = input.string("America/New_York", "Session timezone",
+     options = ["America/New_York", "America/Chicago", "Etc/UTC"], group = groupTime)
+
+showTradePlan   = input.bool(true, "Show entry / stop / target", group = groupRisk)
+entryMode       = input.string("OB Midpoint", "Entry method",
+     options = ["OB Proximal", "OB Midpoint", "FVG Midpoint"], group = groupRisk)
+stopBufferATR   = input.float(0.10, "Stop buffer × ATR", minval = 0.0, step = 0.05, group = groupRisk)
+targetRR        = input.float(2.0, "Target risk/reward", minval = 0.5, step = 0.25, group = groupRisk)
+
+showEMAs        = input.bool(true, "Show 20 / 50 / 200 EMAs", group = groupVisual)
+showSetupArrows = input.bool(true, "Show qualified setup arrows", group = groupVisual)
+showBiasTint    = input.bool(false, "Show subtle bias background", group = groupVisual)
+showStructureLines = input.bool(true, "Show dashed BOS / CHoCH lines", group = groupVisual)
+internalStructureLineBars = input.int(30, "Internal lookback length (bars)", minval = 3, maxval = 200, group = groupVisual)
+externalStructureLineBars = input.int(90, "External lookback length (bars)", minval = 3, maxval = 400, group = groupVisual)
+structureForwardBars = input.int(18, "Extend structure line past break (bars)", minval = 0, maxval = 100, group = groupVisual)
+structureLineWidth = input.int(1, "Structure-line width", minval = 1, maxval = 3, group = groupVisual)
+anchorStructureAtSwing = input.bool(true, "Anchor structure line at broken swing", group = groupVisual)
+structureLabelPosition = input.string("Near break", "Structure text position", options = ["Centered", "Near break"], group = groupVisual)
+fadeInternalStructure = input.bool(true, "Fade internal structure events", group = groupVisual)
+showSessionShading = input.bool(true, "Show Asia / London / New York shading", group = groupVisual)
+visualMode = input.string("Study", "Visual mode", options = ["Study", "Trading", "Minimal"], group = groupVisual)
+showLiquidityLines = input.bool(true, "Show liquidity labels with dashed lines", group = groupVisual)
+liquidityLineBars = input.int(10, "Liquidity-line length (bars)", minval = 3, maxval = 50, group = groupVisual)
+showSmartTradePanel = input.bool(true, "Show smart trade planner in dashboard", group = groupVisual)
+asiaSession = input.session("1900-0200", "Asia session", group = groupTime)
+londonSession = input.session("0200-0500", "London session", group = groupTime)
+newYorkSession = input.session("0830-1100", "New York session", group = groupTime)
+
+//=============================================================================
+// 2. COLORS
+//=============================================================================
+bullColor    = color.rgb(35, 180, 105)
+bearColor    = color.rgb(225, 75, 75)
+neutralColor = color.rgb(145, 150, 160)
+liqColor     = color.rgb(235, 180, 45)
+fvgColor     = color.rgb(70, 145, 235)
+panelColor   = color.new(color.rgb(18, 22, 30), 5)
+chochBullColor = color.aqua
+chochBearColor = color.orange
+asiaShade = color.new(color.rgb(176, 132, 32), 91)
+londonShade = color.new(color.rgb(35, 95, 180), 91)
+newYorkShade = color.new(color.rgb(130, 70, 170), 91)
+
+//=============================================================================
+// 3. CURRENT-TIMEFRAME EMA CONTEXT
+//=============================================================================
+ema20  = ta.ema(close, 20)
+ema50  = ta.ema(close, 50)
+ema200 = ta.ema(close, 200)
+
+plot(showEMAs ? ema20 : na, "EMA 20", color = color.green, linewidth = 1)
+plot(showEMAs ? ema50 : na, "EMA 50", color = color.orange, linewidth = 1)
+plot(showEMAs ? ema200 : na, "EMA 200", color = color.purple, linewidth = 2)
+
+//=============================================================================
+// 4. HIGHER-TIMEFRAME BIAS
+// Non-repainting request.security values from completed HTF candles.
+//=============================================================================
+htfClose = request.security(syminfo.tickerid, biasTimeframe, close[1], barmerge.gaps_off, barmerge.lookahead_on)
+htfEma20 = request.security(syminfo.tickerid, biasTimeframe, ta.ema(close, 20)[1], barmerge.gaps_off, barmerge.lookahead_on)
+htfEma50 = request.security(syminfo.tickerid, biasTimeframe, ta.ema(close, 50)[1], barmerge.gaps_off, barmerge.lookahead_on)
+htfEma200 = request.security(syminfo.tickerid, biasTimeframe, ta.ema(close, 200)[1], barmerge.gaps_off, barmerge.lookahead_on)
+
+ctfClose = request.security(syminfo.tickerid, confirmTimeframe, close[1], barmerge.gaps_off, barmerge.lookahead_on)
+ctfEma20 = request.security(syminfo.tickerid, confirmTimeframe, ta.ema(close, 20)[1], barmerge.gaps_off, barmerge.lookahead_on)
+ctfEma50 = request.security(syminfo.tickerid, confirmTimeframe, ta.ema(close, 50)[1], barmerge.gaps_off, barmerge.lookahead_on)
+ctfEma200 = request.security(syminfo.tickerid, confirmTimeframe, ta.ema(close, 200)[1], barmerge.gaps_off, barmerge.lookahead_on)
+
+htfEmaBull = htfEma20 > htfEma50 and htfEma50 > htfEma200 and htfClose > htfEma20
+htfEmaBear = htfEma20 < htfEma50 and htfEma50 < htfEma200 and htfClose < htfEma20
+ctfEmaBull = ctfEma20 > ctfEma50 and ctfEma50 > ctfEma200 and ctfClose > ctfEma20
+ctfEmaBear = ctfEma20 < ctfEma50 and ctfEma50 < ctfEma200 and ctfClose < ctfEma20
+
+// Simple HTF structure proxy using confirmed pivots.
+htfPH = request.security(syminfo.tickerid, biasTimeframe, ta.pivothigh(high, externalLen, externalLen)[1], barmerge.gaps_off, barmerge.lookahead_on)
+htfPL = request.security(syminfo.tickerid, biasTimeframe, ta.pivotlow(low, externalLen, externalLen)[1], barmerge.gaps_off, barmerge.lookahead_on)
+
+var float htfProtectedHigh = na
+var float htfProtectedLow = na
+var int htfStructure = 0
+
+if not na(htfPH)
+    htfProtectedHigh := htfPH
+if not na(htfPL)
+    htfProtectedLow := htfPL
+
+if not na(htfProtectedHigh) and htfClose > htfProtectedHigh
+    htfStructure := 1
+if not na(htfProtectedLow) and htfClose < htfProtectedLow
+    htfStructure := -1
+
+htfStructureBull = htfStructure == 1
+htfStructureBear = htfStructure == -1
+
+bullBias = biasMode == "EMA" ? (htfEmaBull and ctfEmaBull) :
+     biasMode == "Structure" ? htfStructureBull :
+     (htfEmaBull and ctfEmaBull and htfStructureBull)
+
+bearBias = biasMode == "EMA" ? (htfEmaBear and ctfEmaBear) :
+     biasMode == "Structure" ? htfStructureBear :
+     (htfEmaBear and ctfEmaBear and htfStructureBear)
+
+biasText = bullBias ? "Bullish" : bearBias ? "Bearish" : "Mixed"
+bgcolor(showBiasTint ? (bullBias ? color.new(bullColor, 94) : bearBias ? color.new(bearColor, 94) : na) : na)
+
+//=============================================================================
+// 5. SESSION + DISPLACEMENT
+//=============================================================================
+inSession = not na(time(timeframe.period, tradeSession, sessionTimezone))
+sessionAllowed = not useSessionFilter or inSession
+inAsia = not na(time(timeframe.period, asiaSession, sessionTimezone))
+inLondon = not na(time(timeframe.period, londonSession, sessionTimezone))
+inNewYork = not na(time(timeframe.period, newYorkSession, sessionTimezone))
+activeSessionText = inNewYork ? "New York" : inLondon ? "London" : inAsia ? "Asia" : "Inactive"
+bgcolor(showSessionShading and visualMode == "Study" ? (inAsia ? asiaShade : inLondon ? londonShade : inNewYork ? newYorkShade : na) : na)
+
+atr = ta.atr(atrLength)
+rangeNow = math.max(high - low, syminfo.mintick)
+bodyNow = math.abs(close - open)
+bodyPct = bodyNow / rangeNow * 100.0
+
+bullFVGNow = bar_index >= 2 and low > high[2]
+bearFVGNow = bar_index >= 2 and high < low[2]
+
+bullDisplacement = close > open and bodyNow >= atr * bodyATR and bodyPct >= bodyPercentMin and
+     (not requireFVGOnDisplacement or bullFVGNow)
+bearDisplacement = close < open and bodyNow >= atr * bodyATR and bodyPct >= bodyPercentMin and
+     (not requireFVGOnDisplacement or bearFVGNow)
+
+var int lastBullDisplacementBar = na
+var int lastBearDisplacementBar = na
+if bullDisplacement
+    lastBullDisplacementBar := bar_index
+if bearDisplacement
+    lastBearDisplacementBar := bar_index
+recentBullDisplacement = not na(lastBullDisplacementBar) and bar_index - lastBullDisplacementBar <= displacementMemoryBars
+recentBearDisplacement = not na(lastBearDisplacementBar) and bar_index - lastBearDisplacementBar <= displacementMemoryBars
+
+//=============================================================================
+// 6. INTERNAL / EXTERNAL STRUCTURE
+//=============================================================================
+intPH = ta.pivothigh(high, internalLen, internalLen)
+intPL = ta.pivotlow(low, internalLen, internalLen)
+extPH = ta.pivothigh(high, externalLen, externalLen)
+extPL = ta.pivotlow(low, externalLen, externalLen)
+
+var float lastIntHigh = na
+var float lastIntLow = na
+var int lastIntHighBar = na
+var int lastIntLowBar = na
+var bool intHighArmed = false
+var bool intLowArmed = false
+
+var float lastExtHigh = na
+var float lastExtLow = na
+var int lastExtHighBar = na
+var int lastExtLowBar = na
+var bool extHighArmed = false
+var bool extLowArmed = false
+
+if not na(intPH)
+    lastIntHigh := intPH
+    lastIntHighBar := bar_index - internalLen
+    intHighArmed := true
+if not na(intPL)
+    lastIntLow := intPL
+    lastIntLowBar := bar_index - internalLen
+    intLowArmed := true
+if not na(extPH)
+    lastExtHigh := extPH
+    lastExtHighBar := bar_index - externalLen
+    extHighArmed := true
+if not na(extPL)
+    lastExtLow := extPL
+    lastExtLowBar := bar_index - externalLen
+    extLowArmed := true
+
+breakAbove(float level) =>
+    not na(level) and (requireCloseBreak ? (close > level and close[1] <= level) : (high > level and high[1] <= level))
+
+breakBelow(float level) =>
+    not na(level) and (requireCloseBreak ? (close < level and close[1] >= level) : (low < level and low[1] >= level))
+
+internalBullBreakRaw = intHighArmed and breakAbove(lastIntHigh)
+internalBearBreakRaw = intLowArmed and breakBelow(lastIntLow)
+externalBullBreakRaw = extHighArmed and breakAbove(lastExtHigh)
+externalBearBreakRaw = extLowArmed and breakBelow(lastExtLow)
+
+//=============================================================================
+// 7. MODULAR LIQUIDITY ENGINE
+// Persistent sources: internal/external swings, PDH/PDL, PWH/PWL and EQH/EQL.
+//=============================================================================
+pdh = request.security(syminfo.tickerid, "D", high[1], barmerge.gaps_off, barmerge.lookahead_on)
+pdl = request.security(syminfo.tickerid, "D", low[1], barmerge.gaps_off, barmerge.lookahead_on)
+pwh = request.security(syminfo.tickerid, "W", high[1], barmerge.gaps_off, barmerge.lookahead_on)
+pwl = request.security(syminfo.tickerid, "W", low[1], barmerge.gaps_off, barmerge.lookahead_on)
+
+plot(showPDLevels ? pdh : na, "PDH", color = color.new(liqColor, 35), style = plot.style_linebr)
+plot(showPDLevels ? pdl : na, "PDL", color = color.new(liqColor, 35), style = plot.style_linebr)
+plot(showPWLevels ? pwh : na, "PWH", color = color.new(liqColor, 60), style = plot.style_linebr)
+plot(showPWLevels ? pwl : na, "PWL", color = color.new(liqColor, 60), style = plot.style_linebr)
+
+sweepHigh(float level) =>
+    not na(level) and high > level and (liquiditySweepMode == "Any Trade Through" or close < level)
+
+sweepLow(float level) =>
+    not na(level) and low < level and (liquiditySweepMode == "Any Trade Through" or close > level)
+
+internalBSLSweep = showInternalLiquidity and useInternalSweepGate and intHighArmed and sweepHigh(lastIntHigh)
+internalSSLSweep = showInternalLiquidity and useInternalSweepGate and intLowArmed and sweepLow(lastIntLow)
+externalBSLSweep = showExternalLiquidity and extHighArmed and sweepHigh(lastExtHigh)
+externalSSLSweep = showExternalLiquidity and extLowArmed and sweepLow(lastExtLow)
+pdhSweep = sweepHigh(pdh)
+pdlSweep = sweepLow(pdl)
+pwhSweep = sweepHigh(pwh)
+pwlSweep = sweepLow(pwl)
+
+// Persistent equal-liquidity objects. A level is created from two confirmed
+// external pivots, stays extended while untouched, then is relabeled as taken.
+var array<float> eqHighLevels = array.new<float>()
+var array<line> eqHighLines = array.new<line>()
+var array<label> eqHighLabels = array.new<label>()
+var array<float> eqLowLevels = array.new<float>()
+var array<line> eqLowLines = array.new<line>()
+var array<label> eqLowLabels = array.new<label>()
+
+newEqualHigh = useEqualLiquidity and not na(extPH) and not na(lastExtHigh[1]) and math.abs(extPH - lastExtHigh[1]) <= atr * equalToleranceATR
+newEqualLow = useEqualLiquidity and not na(extPL) and not na(lastExtLow[1]) and math.abs(extPL - lastExtLow[1]) <= atr * equalToleranceATR
+
+addEqualLevel(bool isHigh, float level, int leftBar) =>
+    color levelColor = liqColor
+    line ln = line.new(leftBar, level, bar_index, level, xloc = xloc.bar_index, extend = extend.right, color = color.new(levelColor, 10), width = 1, style = line.style_dashed)
+    label lb = label.new(bar_index, level, isHigh ? "EQH  Untouched" : "EQL  Untouched", xloc = xloc.bar_index, yloc = yloc.price, style = label.style_none, textcolor = levelColor, size = size.tiny)
+    if isHigh
+        array.push(eqHighLevels, level)
+        array.push(eqHighLines, ln)
+        array.push(eqHighLabels, lb)
+        if array.size(eqHighLevels) > maxEqualLevels
+            array.shift(eqHighLevels)
+            line.delete(array.shift(eqHighLines))
+            label.delete(array.shift(eqHighLabels))
+    else
+        array.push(eqLowLevels, level)
+        array.push(eqLowLines, ln)
+        array.push(eqLowLabels, lb)
+        if array.size(eqLowLevels) > maxEqualLevels
+            array.shift(eqLowLevels)
+            line.delete(array.shift(eqLowLines))
+            label.delete(array.shift(eqLowLabels))
+
+if newEqualHigh
+    addEqualLevel(true, (extPH + lastExtHigh[1]) / 2.0, bar_index - externalLen)
+if newEqualLow
+    addEqualLevel(false, (extPL + lastExtLow[1]) / 2.0, bar_index - externalLen)
+
+var bool eqhSweep = false
+var bool eqlSweep = false
+var float eqhSweepLevel = na
+var float eqlSweepLevel = na
+eqhSweep := false
+eqlSweep := false
+eqhSweepLevel := na
+eqlSweepLevel := na
+
+if array.size(eqHighLevels) > 0
+    for i = array.size(eqHighLevels) - 1 to 0
+        float level = array.get(eqHighLevels, i)
+        line ln = array.get(eqHighLines, i)
+        label lb = array.get(eqHighLabels, i)
+        label.set_x(lb, bar_index)
+        if sweepHigh(level)
+            eqhSweep := true
+            eqhSweepLevel := level
+            line.set_extend(ln, extend.none)
+            line.set_x2(ln, bar_index)
+            line.set_color(ln, color.new(bearColor, 25))
+            label.set_text(lb, "EQH  Taken ✓")
+            label.set_textcolor(lb, bearColor)
+            array.remove(eqHighLevels, i)
+            array.remove(eqHighLines, i)
+            array.remove(eqHighLabels, i)
+        else if not showUntouchedEqualLevels
+            line.set_color(ln, color.new(liqColor, 100))
+            label.set_textcolor(lb, color.new(liqColor, 100))
+
+if array.size(eqLowLevels) > 0
+    for i = array.size(eqLowLevels) - 1 to 0
+        float level = array.get(eqLowLevels, i)
+        line ln = array.get(eqLowLines, i)
+        label lb = array.get(eqLowLabels, i)
+        label.set_x(lb, bar_index)
+        if sweepLow(level)
+            eqlSweep := true
+            eqlSweepLevel := level
+            line.set_extend(ln, extend.none)
+            line.set_x2(ln, bar_index)
+            line.set_color(ln, color.new(bullColor, 25))
+            label.set_text(lb, "EQL  Taken ✓")
+            label.set_textcolor(lb, bullColor)
+            array.remove(eqLowLevels, i)
+            array.remove(eqLowLines, i)
+            array.remove(eqLowLabels, i)
+        else if not showUntouchedEqualLevels
+            line.set_color(ln, color.new(liqColor, 100))
+            label.set_textcolor(lb, color.new(liqColor, 100))
+
+buySideSweep = internalBSLSweep or externalBSLSweep or pdhSweep or pwhSweep or eqhSweep
+sellSideSweep = internalSSLSweep or externalSSLSweep or pdlSweep or pwlSweep or eqlSweep
+
+var int lastBSLSweepBar = na
+var int lastSSLSweepBar = na
+var string lastLiquidityEvent = "None"
+var float lastLiquidityLevel = na
+
+if buySideSweep
+    lastBSLSweepBar := bar_index
+    lastLiquidityLevel := pdhSweep ? pdh : pwhSweep ? pwh : eqhSweep ? eqhSweepLevel : internalBSLSweep ? lastIntHigh : lastExtHigh
+    lastLiquidityEvent := pdhSweep ? "PDH swept" : pwhSweep ? "PWH swept" : eqhSweep ? "EQH swept" : internalBSLSweep ? "Internal BSL swept" : "External BSL swept"
+
+if sellSideSweep
+    lastSSLSweepBar := bar_index
+    lastLiquidityLevel := pdlSweep ? pdl : pwlSweep ? pwl : eqlSweep ? eqlSweepLevel : internalSSLSweep ? lastIntLow : lastExtLow
+    lastLiquidityEvent := pdlSweep ? "PDL swept" : pwlSweep ? "PWL swept" : eqlSweep ? "EQL swept" : internalSSLSweep ? "Internal SSL swept" : "External SSL swept"
+
+recentBSLSweep = not na(lastBSLSweepBar) and bar_index - lastBSLSweepBar <= sweepToBreakBars
+recentSSLSweep = not na(lastSSLSweepBar) and bar_index - lastSSLSweepBar <= sweepToBreakBars
+
+var array<line> liquidityLines = array.new<line>()
+var array<label> liquidityLabels = array.new<label>()
+
+addLiquidityMark(string txt, float level, color markColor) =>
+    if showSweepMarks and showLiquidityLines and not na(level)
+        line ln = line.new(bar_index - liquidityLineBars, level, bar_index, level, xloc = xloc.bar_index, extend = extend.none, color = markColor, width = 1, style = line.style_dashed)
+        label lb = label.new(bar_index - math.max(1, int(math.floor(liquidityLineBars / 2))), level, txt, xloc = xloc.bar_index, yloc = yloc.price, style = label.style_none, textcolor = markColor, size = size.tiny)
+        array.push(liquidityLines, ln)
+        array.push(liquidityLabels, lb)
+        if array.size(liquidityLines) > maxLiquidityMarks
+            line.delete(array.shift(liquidityLines))
+            label.delete(array.shift(liquidityLabels))
+
+if buySideSweep
+    addLiquidityMark("BSL  Taken ✓", lastLiquidityLevel, bearColor)
+if sellSideSweep
+    addLiquidityMark("SSL  Taken ✓", lastLiquidityLevel, bullColor)
+
+plotshape(showSweepMarks and not showLiquidityLines and buySideSweep, "Buy-side sweep", shape.xcross, location.abovebar, liqColor, size = size.tiny, text = "BSL")
+plotshape(showSweepMarks and not showLiquidityLines and sellSideSweep, "Sell-side sweep", shape.xcross, location.belowbar, liqColor, size = size.tiny, text = "SSL")
+
+//=============================================================================
+// 8. MSS / BOS STATE ENGINE
+// MSS = internal break opposite current order flow, gated by sweep/displacement.
+// BOS = continuation break in current order flow.
+// External BOS = confirmed external continuation break.
+//=============================================================================
+var int orderFlow = 0
+var string latestStructureEvent = "Waiting"
+var float latestStructureLevel = na
+var int latestStructureBar = na
+var bool latestStructureExternal = false
+
+bullSweepGate = not requireSweepBeforeMSS or recentSSLSweep
+bearSweepGate = not requireSweepBeforeMSS or recentBSLSweep
+
+bullBOSGate = not requireSweepBeforeBOS or recentSSLSweep
+bearBOSGate = not requireSweepBeforeBOS or recentBSLSweep
+
+bullMSS = internalBullBreakRaw and orderFlow == -1 and bullSweepGate and bullDisplacement
+bearMSS = internalBearBreakRaw and orderFlow == 1 and bearSweepGate and bearDisplacement
+
+// When order flow is not established, the first qualified internal break initializes it.
+// Once flow exists, continuation BOS must follow same-side liquidity and displacement.
+bullInternalBOS = internalBullBreakRaw and orderFlow != -1 and bullBOSGate and bullDisplacement
+bearInternalBOS = internalBearBreakRaw and orderFlow != 1 and bearBOSGate and bearDisplacement
+
+bullExternalBOS = externalBullBreakRaw and orderFlow == 1 and bullBOSGate and bullDisplacement
+bearExternalBOS = externalBearBreakRaw and orderFlow == -1 and bearBOSGate and bearDisplacement
+
+if internalBullBreakRaw
+    intHighArmed := false
+if internalBearBreakRaw
+    intLowArmed := false
+if externalBullBreakRaw
+    extHighArmed := false
+if externalBearBreakRaw
+    extLowArmed := false
+
+if bullMSS or bullInternalBOS
+    orderFlow := 1
+if bearMSS or bearInternalBOS
+    orderFlow := -1
+
+// Persist the latest confirmed structure event for the dashboard and future modules.
+if bullMSS
+    latestStructureEvent := "Bullish CHoCH"
+    latestStructureLevel := lastIntHigh
+    latestStructureBar := bar_index
+    latestStructureExternal := false
+else if bearMSS
+    latestStructureEvent := "Bearish CHoCH"
+    latestStructureLevel := lastIntLow
+    latestStructureBar := bar_index
+    latestStructureExternal := false
+else if bullExternalBOS
+    latestStructureEvent := "Bullish BOS"
+    latestStructureLevel := lastExtHigh
+    latestStructureBar := bar_index
+    latestStructureExternal := true
+else if bearExternalBOS
+    latestStructureEvent := "Bearish BOS"
+    latestStructureLevel := lastExtLow
+    latestStructureBar := bar_index
+    latestStructureExternal := true
+else if bullInternalBOS
+    latestStructureEvent := "Bullish BOS"
+    latestStructureLevel := lastIntHigh
+    latestStructureBar := bar_index
+    latestStructureExternal := false
+else if bearInternalBOS
+    latestStructureEvent := "Bearish BOS"
+    latestStructureLevel := lastIntLow
+    latestStructureBar := bar_index
+    latestStructureExternal := false
+
+//=============================================================================
+// 9. ORDER BLOCK / FVG CANDIDATES
+//=============================================================================
+int bullOBOffset = na
+float bullOBTopCandidate = na
+float bullOBBottomCandidate = na
+
+bullSweepAge = recentSSLSweep ? bar_index - lastSSLSweepBar : obSearchBars
+bullOBSearchLimit = math.max(1, math.min(obSearchBars, bullSweepAge))
+
+for i = 1 to bullOBSearchLimit
+    if na(bullOBOffset) and close[i] < open[i]
+        bullOBOffset := i
+        bullOBTopCandidate := useBodyForOB ? open[i] : high[i]
+        bullOBBottomCandidate := useBodyForOB ? close[i] : low[i]
+
+int bearOBOffset = na
+float bearOBTopCandidate = na
+float bearOBBottomCandidate = na
+
+bearSweepAge = recentBSLSweep ? bar_index - lastBSLSweepBar : obSearchBars
+bearOBSearchLimit = math.max(1, math.min(obSearchBars, bearSweepAge))
+
+for i = 1 to bearOBSearchLimit
+    if na(bearOBOffset) and close[i] > open[i]
+        bearOBOffset := i
+        bearOBTopCandidate := useBodyForOB ? close[i] : high[i]
+        bearOBBottomCandidate := useBodyForOB ? open[i] : low[i]
+
+bullFVGTopCandidate = bullFVGNow ? low : na
+bullFVGBottomCandidate = bullFVGNow ? high[2] : na
+bearFVGTopCandidate = bearFVGNow ? low[2] : na
+bearFVGBottomCandidate = bearFVGNow ? high : na
+
+//=============================================================================
+// 10. SCORE + QUALIFICATION
+// Bias 25, liquidity 20, displacement 15, MSS/BOS 20, OB 10, FVG 5, time 5.
+//=============================================================================
+bullStructureEvent = bullMSS or bullExternalBOS or bullInternalBOS
+bearStructureEvent = bearMSS or bearExternalBOS or bearInternalBOS
+
+bullOBOK = not na(bullOBOffset)
+bearOBOK = not na(bearOBOffset)
+bullFVGOK = bullFVGNow
+bearFVGOK = bearFVGNow
+
+// Institutional OB validation:
+// 1) the displacement candle must close beyond the selected opposite candle,
+// 2) the OB may be required to overlap the setup FVG.
+bullOBDisplaced = bullOBOK and close > bullOBTopCandidate
+bearOBDisplaced = bearOBOK and close < bearOBBottomCandidate
+
+bullOBFVGOverlap = bullOBOK and bullFVGOK and
+     math.max(bullOBBottomCandidate, bullFVGBottomCandidate) <= math.min(bullOBTopCandidate, bullFVGTopCandidate)
+bearOBFVGOverlap = bearOBOK and bearFVGOK and
+     math.max(bearOBBottomCandidate, bearFVGBottomCandidate) <= math.min(bearOBTopCandidate, bearFVGTopCandidate)
+
+bullInstitutionalOB = bullOBDisplaced and (not requireOBFVGOverlap or bullOBFVGOverlap)
+bearInstitutionalOB = bearOBDisplaced and (not requireOBFVGOverlap or bearOBFVGOverlap)
+
+bullFVGRequirement = not requireFVGForSetup or bullFVGOK
+bearFVGRequirement = not requireFVGForSetup or bearFVGOK
+
+bullScore = (bullBias ? 25 : 0) +
+     (recentSSLSweep ? 20 : 0) +
+     (bullDisplacement ? 15 : 0) +
+     (bullStructureEvent ? 20 : 0) +
+     (bullInstitutionalOB ? 10 : 0) +
+     (bullFVGOK ? 5 : 0) +
+     (sessionAllowed ? 5 : 0)
+
+bearScore = (bearBias ? 25 : 0) +
+     (recentBSLSweep ? 20 : 0) +
+     (bearDisplacement ? 15 : 0) +
+     (bearStructureEvent ? 20 : 0) +
+     (bearInstitutionalOB ? 10 : 0) +
+     (bearFVGOK ? 5 : 0) +
+     (sessionAllowed ? 5 : 0)
+
+bullQualified = bullStructureEvent and bullBias and recentSSLSweep and bullDisplacement and bullInstitutionalOB and bullFVGRequirement and sessionAllowed and bullScore >= minimumScore
+bearQualified = bearStructureEvent and bearBias and recentBSLSweep and bearDisplacement and bearInstitutionalOB and bearFVGRequirement and sessionAllowed and bearScore >= minimumScore
+
+//=============================================================================
+// 11. INSTITUTIONAL MARKET-STRUCTURE LINES
+// Tiny text with dashed lines anchored to the broken swing level and extended past the break.
+//=============================================================================
+var array<line> structureLines = array.new<line>()
+var array<label> structureLabels = array.new<label>()
+
+addStructureMark(string txt, int swingBar, float level, color markColor, bool externalEvent) =>
+    if showStructureLines and not na(level)
+        int configuredLength = externalEvent ? externalStructureLineBars : internalStructureLineBars
+        int fallbackLeft = bar_index - configuredLength
+        int requestedLeft = anchorStructureAtSwing and not na(swingBar) ? swingBar : fallbackLeft
+        int leftBar = math.max(fallbackLeft, requestedLeft)
+        int rightBar = bar_index + structureForwardBars
+        int centerBar = leftBar + int(math.floor((rightBar - leftBar) / 2.0))
+        int nearBreakBar = math.max(leftBar, bar_index - 1)
+        int textBar = structureLabelPosition == "Centered" ? centerBar : nearBreakBar
+        int internalFade = fadeInternalStructure ? 35 : 10
+        color eventColor = externalEvent ? color.new(markColor, 0) : color.new(markColor, internalFade)
+        line ln = line.new(
+             leftBar, level, rightBar, level,
+             xloc = xloc.bar_index, extend = extend.none,
+             color = eventColor, width = structureLineWidth, style = line.style_dashed
+         )
+        label lb = label.new(
+             textBar, level, txt,
+             xloc = xloc.bar_index, yloc = yloc.price,
+             style = label.style_none, textcolor = eventColor, size = size.tiny
+         )
+        array.push(structureLines, ln)
+        array.push(structureLabels, lb)
+        if array.size(structureLines) > maxLabels
+            line.delete(array.shift(structureLines))
+            label.delete(array.shift(structureLabels))
+
+if showInternalEvents and bullMSS
+    addStructureMark("CHoCH", lastIntHighBar, lastIntHigh, chochBullColor, false)
+if showInternalEvents and bearMSS
+    addStructureMark("CHoCH", lastIntLowBar, lastIntLow, chochBearColor, false)
+if showInternalEvents and bullInternalBOS
+    addStructureMark("BOS", lastIntHighBar, lastIntHigh, bullColor, false)
+if showInternalEvents and bearInternalBOS
+    addStructureMark("BOS", lastIntLowBar, lastIntLow, bearColor, false)
+if showExternalEvents and bullExternalBOS
+    addStructureMark("BOS", lastExtHighBar, lastExtHigh, bullColor, true)
+if showExternalEvents and bearExternalBOS
+    addStructureMark("BOS", lastExtLowBar, lastExtLow, bearColor, true)
+
+//=============================================================================
+// 12. HIGHLIGHTED ORDER-BLOCK / FVG ZONES
+// Validated OBs are drawn even when the full setup is rejected by HTF bias,
+// session, or minimum-score filters. This separates zone identification from
+// trade qualification and makes the institutional candle easy to recognize.
+//=============================================================================
+var array<box> obBoxes = array.new<box>()
+var box activeOB = na
+var box activeFVG = na
+var bool activeBullish = false
+var float activeOBTop = na
+var float activeOBBottom = na
+var float activeFVGTop = na
+var float activeFVGBottom = na
+var bool obActive = false
+var bool fvgActive = false
+var int activeZoneCreatedBar = na
+
+addOBZone(bool bullish, int leftBar, float zoneTop, float zoneBottom) =>
+    string directionText = bullish ? "Bullish OB" : "Bearish OB"
+    string priceText = str.tostring(zoneTop, format.mintick) + " - " + str.tostring(zoneBottom, format.mintick)
+    string fullDirectionText = bullish ? "Bullish Order Block" : "Bearish Order Block"
+    string zoneTextLabel = showOBPriceText ? "NEWEST  •  " + fullDirectionText + "\n" + priceText : fullDirectionText
+    color zoneColor = bullish ? bullColor : bearColor
+    box newZone = box.new(
+         leftBar, zoneTop, bar_index, zoneBottom,
+         xloc = xloc.bar_index,
+         extend = extend.right,
+         border_color = zoneColor,
+         border_width = obBorderWidth,
+         bgcolor = color.new(zoneColor, obZoneOpacity),
+         text = zoneTextLabel,
+         text_color = color.white,
+         text_size = size.small,
+         text_halign = text.align_center,
+         text_valign = text.align_center
+     )
+    array.push(obBoxes, newZone)
+    if array.size(obBoxes) > maxOBZones
+        box.delete(array.shift(obBoxes))
+    newZone
+
+// Draw the zone as soon as structure + displacement validate the OB.
+// Full qualification remains responsible for arrows and trade plans.
+bullOBZoneSignal = bullStructureEvent and bullInstitutionalOB and bullFVGRequirement
+bearOBZoneSignal = bearStructureEvent and bearInstitutionalOB and bearFVGRequirement
+
+if bullOBZoneSignal
+    activeBullish := true
+    activeOBTop := bullOBTopCandidate
+    activeOBBottom := bullOBBottomCandidate
+    activeFVGTop := bullFVGTopCandidate
+    activeFVGBottom := bullFVGBottomCandidate
+    obActive := true
+    fvgActive := bullFVGOK
+    activeZoneCreatedBar := bar_index
+
+    if showOrderBlock
+        activeOB := addOBZone(true, bar_index - bullOBOffset, activeOBTop, activeOBBottom)
+
+    if showFVG and bullFVGOK
+        box.delete(activeFVG)
+        activeFVG := box.new(
+             bar_index - 2, activeFVGTop, bar_index, activeFVGBottom,
+             xloc = xloc.bar_index, extend = extend.right,
+             border_color = color.new(bullColor, 5), border_width = 1, border_style = line.style_dashed,
+             bgcolor = color.new(bullColor, 90),
+             text = "Bullish FVG  " + str.tostring(activeFVGTop, format.mintick) + " - " + str.tostring(activeFVGBottom, format.mintick),
+             text_color = color.white, text_size = size.tiny,
+             text_halign = text.align_center, text_valign = text.align_center
+         )
+
+if bearOBZoneSignal
+    activeBullish := false
+    activeOBTop := bearOBTopCandidate
+    activeOBBottom := bearOBBottomCandidate
+    activeFVGTop := bearFVGTopCandidate
+    activeFVGBottom := bearFVGBottomCandidate
+    obActive := true
+    fvgActive := bearFVGOK
+    activeZoneCreatedBar := bar_index
+
+    if showOrderBlock
+        activeOB := addOBZone(false, bar_index - bearOBOffset, activeOBTop, activeOBBottom)
+
+    if showFVG and bearFVGOK
+        box.delete(activeFVG)
+        activeFVG := box.new(
+             bar_index - 2, activeFVGTop, bar_index, activeFVGBottom,
+             xloc = xloc.bar_index, extend = extend.right,
+             border_color = color.new(bearColor, 5), border_width = 1, border_style = line.style_dashed,
+             bgcolor = color.new(bearColor, 90),
+             text = "Bearish FVG  " + str.tostring(activeFVGTop, format.mintick) + " - " + str.tostring(activeFVGBottom, format.mintick),
+             text_color = color.white, text_size = size.tiny,
+             text_halign = text.align_center, text_valign = text.align_center
+         )
+
+zoneCanMitigate = not na(activeZoneCreatedBar) and bar_index > activeZoneCreatedBar
+activeOBMid = (activeOBTop + activeOBBottom) / 2.0
+
+bullOBMitigationPrice = obMitigationMode == "Full" ? activeOBBottom :
+     obMitigationMode == "Midpoint" ? activeOBMid : activeOBTop
+bearOBMitigationPrice = obMitigationMode == "Full" ? activeOBTop :
+     obMitigationMode == "Midpoint" ? activeOBMid : activeOBBottom
+
+obMitigated = obActive and zoneCanMitigate and (
+     activeBullish ? low <= bullOBMitigationPrice : high >= bearOBMitigationPrice
+)
+
+fvgFilled = fvgActive and zoneCanMitigate and (
+     activeBullish ? low <= activeFVGBottom : high >= activeFVGTop
+)
+
+if obMitigated
+    obActive := false
+    if not na(activeOB)
+        if deleteMitigated
+            box.delete(activeOB)
+            activeOB := na
+        else
+            box.set_extend(activeOB, extend.none)
+            box.set_right(activeOB, bar_index)
+            box.set_bgcolor(activeOB, color.new(activeBullish ? bullColor : bearColor, 92))
+            box.set_text(activeOB, (activeBullish ? "Bullish OB" : "Bearish OB") + "  MITIGATED")
+
+if fvgFilled
+    fvgActive := false
+    if deleteMitigated
+        box.delete(activeFVG)
+        activeFVG := na
+    else if not na(activeFVG)
+        box.set_extend(activeFVG, extend.none)
+        box.set_right(activeFVG, bar_index)
+        box.set_bgcolor(activeFVG, color.new(fvgColor, 93))
+
+//=============================================================================
+// 13. TRADE PLAN
+//=============================================================================
+var line entryLine = na
+var line stopLine = na
+var line targetLine = na
+var label tradeLabel = na
+var float lastPlanEntry = na
+var float lastPlanStop = na
+var float lastPlanTarget = na
+var float lastPlanRR = na
+var string lastPlanDirection = "WAIT"
+
+clearTradePlan() =>
+    line.delete(entryLine)
+    line.delete(stopLine)
+    line.delete(targetLine)
+    label.delete(tradeLabel)
+
+if showTradePlan and bullQualified
+    clearTradePlan()
+
+    float entry = entryMode == "OB Proximal" ? activeOBTop :
+         entryMode == "FVG Midpoint" ? (activeFVGTop + activeFVGBottom) / 2.0 :
+         (activeOBTop + activeOBBottom) / 2.0
+
+    float stop = activeOBBottom - atr * stopBufferATR
+    float risk = math.max(entry - stop, syminfo.mintick)
+    float target = entry + risk * targetRR
+    lastPlanEntry := entry
+    lastPlanStop := stop
+    lastPlanTarget := target
+    lastPlanRR := targetRR
+    lastPlanDirection := "LONG"
+
+    entryLine := line.new(bar_index, entry, bar_index + 20, entry, xloc = xloc.bar_index, color = color.white, style = line.style_dashed)
+    stopLine := line.new(bar_index, stop, bar_index + 20, stop, xloc = xloc.bar_index, color = bearColor, style = line.style_dotted)
+    targetLine := line.new(bar_index, target, bar_index + 20, target, xloc = xloc.bar_index, color = bullColor, style = line.style_dotted)
+    tradeLabel := label.new(
+         bar_index + 20, entry,
+         "BUY  " + str.tostring(bullScore) + "%\nE " + str.tostring(entry, format.mintick) +
+         "\nSL " + str.tostring(stop, format.mintick) +
+         "\nTP " + str.tostring(target, format.mintick),
+         xloc = xloc.bar_index, yloc = yloc.price,
+         style = label.style_label_left, color = bullColor, textcolor = color.white
+     )
+
+if showTradePlan and bearQualified
+    clearTradePlan()
+
+    float entry = entryMode == "OB Proximal" ? activeOBBottom :
+         entryMode == "FVG Midpoint" ? (activeFVGTop + activeFVGBottom) / 2.0 :
+         (activeOBTop + activeOBBottom) / 2.0
+
+    float stop = activeOBTop + atr * stopBufferATR
+    float risk = math.max(stop - entry, syminfo.mintick)
+    float target = entry - risk * targetRR
+    lastPlanEntry := entry
+    lastPlanStop := stop
+    lastPlanTarget := target
+    lastPlanRR := targetRR
+    lastPlanDirection := "SHORT"
+
+    entryLine := line.new(bar_index, entry, bar_index + 20, entry, xloc = xloc.bar_index, color = color.white, style = line.style_dashed)
+    stopLine := line.new(bar_index, stop, bar_index + 20, stop, xloc = xloc.bar_index, color = bearColor, style = line.style_dotted)
+    targetLine := line.new(bar_index, target, bar_index + 20, target, xloc = xloc.bar_index, color = bullColor, style = line.style_dotted)
+    tradeLabel := label.new(
+         bar_index + 20, entry,
+         "SELL  " + str.tostring(bearScore) + "%\nE " + str.tostring(entry, format.mintick) +
+         "\nSL " + str.tostring(stop, format.mintick) +
+         "\nTP " + str.tostring(target, format.mintick),
+         xloc = xloc.bar_index, yloc = yloc.price,
+         style = label.style_label_left, color = bearColor, textcolor = color.white
+     )
+
+plotshape(showSetupArrows and visualMode != "Minimal" and bullQualified, "Qualified bullish Genesis setup", shape.triangleup, location.belowbar, bullColor, size = size.small, text = "ICE")
+plotshape(showSetupArrows and visualMode != "Minimal" and bearQualified, "Qualified bearish Genesis setup", shape.triangledown, location.abovebar, bearColor, size = size.small, text = "ICE")
+
+//=============================================================================
+// 14. OPTIONAL HTF LEVELS
+//=============================================================================
+plot(showHTFLevels ? htfProtectedHigh : na, "HTF Protected High", color = color.new(bearColor, 65), style = plot.style_linebr)
+plot(showHTFLevels ? htfProtectedLow : na, "HTF Protected Low", color = color.new(bullColor, 65), style = plot.style_linebr)
+
+//=============================================================================
+// 15. INSTITUTIONAL DASHBOARD
+//=============================================================================
+gradeFromScore(int score) =>
+    score >= 95 ? "A+" : score >= 90 ? "A" : score >= 85 ? "B+" : score >= 80 ? "B" : score >= 70 ? "C" : "PASS"
+
+var int lastScore = 0
+var string lastDecision = "WAIT"
+var string lastGrade = "-"
+var string lastStructureText = "Waiting"
+var string lastOBValidationText = "Waiting"
+
+if bullStructureEvent
+    lastScore := bullScore
+    lastDecision := bullQualified ? "LONG" : "WAIT"
+    lastGrade := gradeFromScore(bullScore)
+    lastStructureText := bullMSS ? "Bullish CHoCH" : "Bullish BOS"
+    lastOBValidationText := bullInstitutionalOB ? (bullOBFVGOverlap ? "Valid + overlap" : "Valid") : "Rejected"
+
+if bearStructureEvent
+    lastScore := bearScore
+    lastDecision := bearQualified ? "SHORT" : "WAIT"
+    lastGrade := gradeFromScore(bearScore)
+    lastStructureText := bearMSS ? "Bearish CHoCH" : "Bearish BOS"
+    lastOBValidationText := bearInstitutionalOB ? (bearOBFVGOverlap ? "Valid + overlap" : "Valid") : "Rejected"
+
+flowText = orderFlow == 1 ? "Bullish" : orderFlow == -1 ? "Bearish" : "Undetermined"
+zoneText = obActive ? (activeBullish ? "Bullish OB" : "Bearish OB") : "Waiting"
+fvgText = fvgActive ? (activeBullish ? "Bullish FVG" : "Bearish FVG") : "Waiting"
+marketStateText = math.abs(ema20 - ema50) > atr * 0.25 ? "Trending" : "Ranging"
+extRangeValid = not na(lastExtHigh) and not na(lastExtLow) and lastExtHigh > lastExtLow
+rangeMid = extRangeValid ? (lastExtHigh + lastExtLow) / 2.0 : na
+premiumDiscountText = not extRangeValid ? "Unknown" : close >= rangeMid ? "Premium" : "Discount"
+oteHigh = extRangeValid ? lastExtHigh : na
+oteLow = extRangeValid ? lastExtLow : na
+ote79 = extRangeValid ? oteHigh - (oteHigh - oteLow) * 0.79 : na
+ote618 = extRangeValid ? oteHigh - (oteHigh - oteLow) * 0.618 : na
+
+check(bool condition, string yesText, string noText) => condition ? "●  " + yesText : "○  " + noText
+
+var table dash = table.new(position.top_right, 2, 30, border_width = 1, border_color = color.new(neutralColor, 65))
+
+if barstate.islast and showDashboard
+    table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+    table.cell(dash, 1, 0, "v1.0 A3", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+    table.cell(dash, 0, 1, "INSTITUTIONAL EDGE", text_color = neutralColor, bgcolor = panelColor, text_size = size.tiny)
+    table.cell(dash, 1, 1, "", bgcolor = panelColor)
+
+    table.cell(dash, 0, 2, "MARKET CONTEXT", text_color = color.white, bgcolor = color.new(color.black, 0))
+    table.cell(dash, 1, 2, "", bgcolor = color.new(color.black, 0))
+    table.cell(dash, 0, 3, "HTF Bias", text_color = neutralColor, bgcolor = panelColor)
+    table.cell(dash, 1, 3, biasText, text_color = bullBias ? bullColor : bearBias ? bearColor : neutralColor, bgcolor = panelColor)
+    table.cell(dash, 0, 4, "Market State", text_color = neutralColor, bgcolor = panelColor)
+    table.cell(dash, 1, 4, marketStateText, text_color = neutralColor, bgcolor = panelColor)
+    table.cell(dash, 0, 5, "Order Flow", text_color = neutralColor, bgcolor = panelColor)
+    table.cell(dash, 1, 5, flowText, text_color = orderFlow == 1 ? bullColor : orderFlow == -1 ? bearColor : neutralColor, bgcolor = panelColor)
+    table.cell(dash, 0, 6, "Premium / Discount", text_color = neutralColor, bgcolor = panelColor)
+    table.cell(dash, 1, 6, premiumDiscountText, text_color = premiumDiscountText == "Discount" ? bullColor : premiumDiscountText == "Premium" ? bearColor : neutralColor, bgcolor = panelColor)
+
+    table.cell(dash, 0, 7, "SETUP CHECKLIST", text_color = color.white, bgcolor = color.new(color.black, 0))
+    table.cell(dash, 1, 7, "", bgcolor = color.new(color.black, 0))
+    bool directionBull = orderFlow == 1
+    table.cell(dash, 0, 8, "1. Liquidity", text_color = neutralColor, bgcolor = panelColor)
+    table.cell(dash, 1, 8, check(directionBull ? recentSSLSweep : recentBSLSweep, directionBull ? "SSL Swept" : "BSL Swept", "Waiting"), text_color = (recentSSLSweep or recentBSLSweep) ? bullColor : neutralColor, bgcolor = panelColor)
+    table.cell(dash, 0, 9, "2. Displacement", text_color = neutralColor, bgcolor = panelColor)
+    bool dashboardDisplacement = directionBull ? recentBullDisplacement : recentBearDisplacement
+    table.cell(dash, 1, 9, check(dashboardDisplacement, "Strong", "Waiting"), text_color = dashboardDisplacement ? bullColor : neutralColor, bgcolor = panelColor)
+    table.cell(dash, 0, 10, "3. Structure", text_color = neutralColor, bgcolor = panelColor)
+    table.cell(dash, 1, 10, latestStructureEvent, text_color = str.contains(latestStructureEvent, "Bullish") ? bullColor : str.contains(latestStructureEvent, "Bearish") ? bearColor : neutralColor, bgcolor = panelColor)
+    table.cell(dash, 0, 11, "4. Order Block", text_color = neutralColor, bgcolor = panelColor)
+    table.cell(dash, 1, 11, check(obActive, zoneText, "Waiting"), text_color = obActive ? (activeBullish ? bullColor : bearColor) : neutralColor, bgcolor = panelColor)
+    table.cell(dash, 0, 12, "5. FVG", text_color = neutralColor, bgcolor = panelColor)
+    table.cell(dash, 1, 12, check(fvgActive, fvgText, "Waiting"), text_color = fvgActive ? (activeBullish ? bullColor : bearColor) : neutralColor, bgcolor = panelColor)
+    table.cell(dash, 0, 13, "6. OTE", text_color = neutralColor, bgcolor = panelColor)
+    table.cell(dash, 1, 13, check(extRangeValid and close <= ote618 and close >= ote79, "In OTE", "Outside"), text_color = extRangeValid and close <= ote618 and close >= ote79 ? bullColor : neutralColor, bgcolor = panelColor)
+    table.cell(dash, 0, 14, "7. HTF Alignment", text_color = neutralColor, bgcolor = panelColor)
+    table.cell(dash, 1, 14, check(bullBias or bearBias, biasText, "Mixed"), text_color = bullBias ? bullColor : bearBias ? bearColor : neutralColor, bgcolor = panelColor)
+    table.cell(dash, 0, 15, "8. Session", text_color = neutralColor, bgcolor = panelColor)
+    table.cell(dash, 1, 15, check(activeSessionText != "Inactive", activeSessionText, "Inactive"), text_color = activeSessionText != "Inactive" ? bullColor : neutralColor, bgcolor = panelColor)
+
+    table.cell(dash, 0, 16, "TRADE DECISION", text_color = color.white, bgcolor = color.new(color.black, 0))
+    table.cell(dash, 1, 16, "", bgcolor = color.new(color.black, 0))
+    table.cell(dash, 0, 17, "Bias", text_color = neutralColor, bgcolor = panelColor)
+    table.cell(dash, 1, 17, lastDecision, text_color = lastDecision == "LONG" ? bullColor : lastDecision == "SHORT" ? bearColor : neutralColor, bgcolor = panelColor, text_size = size.large)
+    table.cell(dash, 0, 18, "Score", text_color = neutralColor, bgcolor = panelColor)
+    table.cell(dash, 1, 18, str.tostring(lastScore) + "%", text_color = lastScore >= minimumScore ? bullColor : neutralColor, bgcolor = panelColor)
+    table.cell(dash, 0, 19, "Grade", text_color = neutralColor, bgcolor = panelColor)
+    table.cell(dash, 1, 19, lastGrade, text_color = lastScore >= minimumScore ? bullColor : neutralColor, bgcolor = panelColor)
+
+    table.cell(dash, 0, 20, "OTE ZONE (61.8%-79%)", text_color = color.white, bgcolor = color.new(color.black, 0))
+    table.cell(dash, 1, 20, "", bgcolor = color.new(color.black, 0))
+    table.cell(dash, 0, 21, "External High", text_color = neutralColor, bgcolor = panelColor)
+    table.cell(dash, 1, 21, extRangeValid ? str.tostring(oteHigh, format.mintick) : "—", text_color = color.white, bgcolor = panelColor)
+    table.cell(dash, 0, 22, "79% / 61.8%", text_color = neutralColor, bgcolor = panelColor)
+    table.cell(dash, 1, 22, extRangeValid ? str.tostring(ote79, format.mintick) + " / " + str.tostring(ote618, format.mintick) : "—", text_color = bullColor, bgcolor = panelColor)
+    table.cell(dash, 0, 23, "External Low", text_color = neutralColor, bgcolor = panelColor)
+    table.cell(dash, 1, 23, extRangeValid ? str.tostring(oteLow, format.mintick) : "—", text_color = color.white, bgcolor = panelColor)
+
+    table.cell(dash, 0, 24, "SMART TRADE PLAN", text_color = color.white, bgcolor = color.new(color.black, 0))
+    table.cell(dash, 1, 24, showSmartTradePanel ? lastPlanDirection : "Hidden", text_color = lastPlanDirection == "LONG" ? bullColor : lastPlanDirection == "SHORT" ? bearColor : neutralColor, bgcolor = color.new(color.black, 0))
+    table.cell(dash, 0, 25, "Entry", text_color = neutralColor, bgcolor = panelColor)
+    table.cell(dash, 1, 25, showSmartTradePanel and not na(lastPlanEntry) ? str.tostring(lastPlanEntry, format.mintick) : "—", text_color = color.white, bgcolor = panelColor)
+    table.cell(dash, 0, 26, "Stop", text_color = neutralColor, bgcolor = panelColor)
+    table.cell(dash, 1, 26, showSmartTradePanel and not na(lastPlanStop) ? str.tostring(lastPlanStop, format.mintick) : "—", text_color = bearColor, bgcolor = panelColor)
+    table.cell(dash, 0, 27, "Target", text_color = neutralColor, bgcolor = panelColor)
+    table.cell(dash, 1, 27, showSmartTradePanel and not na(lastPlanTarget) ? str.tostring(lastPlanTarget, format.mintick) : "—", text_color = bullColor, bgcolor = panelColor)
+    table.cell(dash, 0, 28, "Risk : Reward", text_color = neutralColor, bgcolor = panelColor)
+    table.cell(dash, 1, 28, showSmartTradePanel and not na(lastPlanRR) ? "1 : " + str.tostring(lastPlanRR, "#.##") : "—", text_color = color.white, bgcolor = panelColor)
+    table.cell(dash, 0, 29, "Structure Module", text_color = neutralColor, bgcolor = panelColor)
+    table.cell(dash, 1, 29, latestStructureExternal ? "External confirmed" : latestStructureEvent == "Waiting" ? "Waiting" : "Internal confirmed", text_color = latestStructureEvent == "Waiting" ? neutralColor : color.white, bgcolor = panelColor)
+
+if barstate.islast and not showDashboard
+    table.clear(dash, 0, 0, 1, 29)
+
+//=============================================================================
+// 16. ALERTS
+//=============================================================================
+alertcondition(buySideSweep, "ICE Genesis: Buy-side liquidity swept", "ICE Genesis detected a buy-side liquidity sweep on {{ticker}} {{interval}}.")
+alertcondition(sellSideSweep, "ICE Genesis: Sell-side liquidity swept", "ICE Genesis detected a sell-side liquidity sweep on {{ticker}} {{interval}}.")
+alertcondition(bullMSS, "ICE Genesis: Bullish CHoCH", "ICE Genesis detected a bullish change of character on {{ticker}} {{interval}}.")
+alertcondition(bearMSS, "ICE Genesis: Bearish CHoCH", "ICE Genesis detected a bearish change of character on {{ticker}} {{interval}}.")
+alertcondition(bullExternalBOS, "ICE Genesis: Bullish external BOS", "ICE Genesis detected a bullish external break of structure on {{ticker}} {{interval}}.")
+alertcondition(bearExternalBOS, "ICE Genesis: Bearish external BOS", "ICE Genesis detected a bearish external break of structure on {{ticker}} {{interval}}.")
+alertcondition(bullOBZoneSignal, "ICE Genesis: Bullish highlighted OB zone", "ICE Genesis highlighted a bullish order-block zone on {{ticker}} {{interval}}.")
+alertcondition(bearOBZoneSignal, "ICE Genesis: Bearish highlighted OB zone", "ICE Genesis highlighted a bearish order-block zone on {{ticker}} {{interval}}.")
+alertcondition(bullStructureEvent and bullInstitutionalOB, "ICE Genesis: Bullish institutional OB", "ICE Genesis validated a bullish institutional order block on {{ticker}} {{interval}}.")
+alertcondition(bearStructureEvent and bearInstitutionalOB, "ICE Genesis: Bearish institutional OB", "ICE Genesis validated a bearish institutional order block on {{ticker}} {{interval}}.")
+alertcondition(bullQualified, "ICE Genesis: Qualified bullish setup", "ICE Genesis qualified a bullish setup on {{ticker}} {{interval}}.")
+alertcondition(bearQualified, "ICE Genesis: Qualified bearish setup", "ICE Genesis qualified a bearish setup on {{ticker}} {{interval}}.")
