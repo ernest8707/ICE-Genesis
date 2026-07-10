@@ -1,6 +1,6 @@
 //@version=6
 indicator(
-     "ICE Genesis v1.0 Alpha 3 - Professional Structure Rendering",
+     "ICE Genesis v1.0 - Market Structure Engine 2.0",
      shorttitle = "ICE Genesis",
      overlay = true,
      max_labels_count = 250,
@@ -48,6 +48,7 @@ showHTFLevels   = input.bool(false, "Show HTF protected levels", group = groupBi
 internalLen     = input.int(3, "Internal swing strength", minval = 2, maxval = 20, group = groupStructure)
 externalLen     = input.int(8, "External swing strength", minval = 3, maxval = 50, group = groupStructure)
 requireCloseBreak = input.bool(true, "Require candle close through structure", group = groupStructure)
+requireDisplacementForStructure = input.bool(true, "Require displacement on structure breaks", group = groupStructure)
 requireSweepBeforeMSS = input.bool(true, "Require liquidity sweep before MSS / CHoCH", group = groupStructure)
 requireSweepBeforeBOS = input.bool(true, "Require liquidity sweep before BOS", group = groupStructure)
 useInternalSweepGate = input.bool(true, "Include internal liquidity sweeps", group = groupStructure)
@@ -228,7 +229,9 @@ recentBullDisplacement = not na(lastBullDisplacementBar) and bar_index - lastBul
 recentBearDisplacement = not na(lastBearDisplacementBar) and bar_index - lastBearDisplacementBar <= displacementMemoryBars
 
 //=============================================================================
-// 6. INTERNAL / EXTERNAL STRUCTURE
+// 6. MARKET STRUCTURE ENGINE 2.0 — SWING REGISTRY
+// Confirmed pivots are stored once, armed once, and consumed once.
+// This keeps detection separate from classification and rendering.
 //=============================================================================
 intPH = ta.pivothigh(high, internalLen, internalLen)
 intPL = ta.pivotlow(low, internalLen, internalLen)
@@ -267,11 +270,12 @@ if not na(extPL)
     extLowArmed := true
 
 breakAbove(float level) =>
-    not na(level) and (requireCloseBreak ? (close > level and close[1] <= level) : (high > level and high[1] <= level))
+    not na(level) and (requireCloseBreak ? close > level and close[1] <= level : high > level and high[1] <= level)
 
 breakBelow(float level) =>
-    not na(level) and (requireCloseBreak ? (close < level and close[1] >= level) : (low < level and low[1] >= level))
+    not na(level) and (requireCloseBreak ? close < level and close[1] >= level : low < level and low[1] >= level)
 
+// Raw events answer only one question: did price break this armed swing?
 internalBullBreakRaw = intHighArmed and breakAbove(lastIntHigh)
 internalBearBreakRaw = intLowArmed and breakBelow(lastIntLow)
 externalBullBreakRaw = extHighArmed and breakAbove(lastExtHigh)
@@ -438,11 +442,12 @@ plotshape(showSweepMarks and not showLiquidityLines and buySideSweep, "Buy-side 
 plotshape(showSweepMarks and not showLiquidityLines and sellSideSweep, "Sell-side sweep", shape.xcross, location.belowbar, liqColor, size = size.tiny, text = "SSL")
 
 //=============================================================================
-// 8. MSS / BOS STATE ENGINE
-// MSS = internal break opposite current order flow, gated by sweep/displacement.
-// BOS = continuation break in current order flow.
-// External BOS = confirmed external continuation break.
+// 8. MARKET STRUCTURE ENGINE 2.0 — CLASSIFICATION & STATE
+// Direction state is explicit for internal and external structure.
+// BOS continues the prior state. CHoCH breaks against the prior state.
 //=============================================================================
+var int internalTrend = 0
+var int externalTrend = 0
 var int orderFlow = 0
 var string latestStructureEvent = "Waiting"
 var float latestStructureLevel = na
@@ -451,21 +456,37 @@ var bool latestStructureExternal = false
 
 bullSweepGate = not requireSweepBeforeMSS or recentSSLSweep
 bearSweepGate = not requireSweepBeforeMSS or recentBSLSweep
-
 bullBOSGate = not requireSweepBeforeBOS or recentSSLSweep
 bearBOSGate = not requireSweepBeforeBOS or recentBSLSweep
 
-bullMSS = internalBullBreakRaw and orderFlow == -1 and bullSweepGate and bullDisplacement
-bearMSS = internalBearBreakRaw and orderFlow == 1 and bearSweepGate and bearDisplacement
+bullStructureDisplacementGate = not requireDisplacementForStructure or bullDisplacement
+bearStructureDisplacementGate = not requireDisplacementForStructure or bearDisplacement
 
-// When order flow is not established, the first qualified internal break initializes it.
-// Once flow exists, continuation BOS must follow same-side liquidity and displacement.
-bullInternalBOS = internalBullBreakRaw and orderFlow != -1 and bullBOSGate and bullDisplacement
-bearInternalBOS = internalBearBreakRaw and orderFlow != 1 and bearBOSGate and bearDisplacement
+qualifiedInternalBullBreak = internalBullBreakRaw and bullStructureDisplacementGate
+qualifiedInternalBearBreak = internalBearBreakRaw and bearStructureDisplacementGate
+qualifiedExternalBullBreak = externalBullBreakRaw and bullStructureDisplacementGate
+qualifiedExternalBearBreak = externalBearBreakRaw and bearStructureDisplacementGate
 
-bullExternalBOS = externalBullBreakRaw and orderFlow == 1 and bullBOSGate and bullDisplacement
-bearExternalBOS = externalBearBreakRaw and orderFlow == -1 and bearBOSGate and bearDisplacement
+internalBullCHoCH = qualifiedInternalBullBreak and internalTrend == -1 and bullSweepGate
+internalBearCHoCH = qualifiedInternalBearBreak and internalTrend == 1 and bearSweepGate
+internalBullBOS = qualifiedInternalBullBreak and internalTrend != -1 and bullBOSGate
+internalBearBOS = qualifiedInternalBearBreak and internalTrend != 1 and bearBOSGate
 
+externalBullCHoCH = qualifiedExternalBullBreak and externalTrend == -1 and bullSweepGate
+externalBearCHoCH = qualifiedExternalBearBreak and externalTrend == 1 and bearSweepGate
+externalBullBOS = qualifiedExternalBullBreak and externalTrend != -1 and bullBOSGate
+externalBearBOS = qualifiedExternalBearBreak and externalTrend != 1 and bearBOSGate
+
+// Compatibility aliases used by downstream engines and existing alerts.
+bullMSS = internalBullCHoCH or externalBullCHoCH
+bearMSS = internalBearCHoCH or externalBearCHoCH
+bullInternalBOS = internalBullBOS
+bearInternalBOS = internalBearBOS
+bullExternalBOS = externalBullBOS
+bearExternalBOS = externalBearBOS
+
+// Consume every raw break once, even when a filter rejects classification.
+// A new confirmed pivot must appear before the same level can trigger again.
 if internalBullBreakRaw
     intHighArmed := false
 if internalBearBreakRaw
@@ -475,42 +496,71 @@ if externalBullBreakRaw
 if externalBearBreakRaw
     extLowArmed := false
 
-if bullMSS or bullInternalBOS
+if internalBullCHoCH or internalBullBOS
+    internalTrend := 1
+if internalBearCHoCH or internalBearBOS
+    internalTrend := -1
+if externalBullCHoCH or externalBullBOS
+    externalTrend := 1
+if externalBearCHoCH or externalBearBOS
+    externalTrend := -1
+
+// External structure leads the published order-flow state when available.
+if externalBullCHoCH or externalBullBOS
     orderFlow := 1
-if bearMSS or bearInternalBOS
+else if externalBearCHoCH or externalBearBOS
+    orderFlow := -1
+else if internalBullCHoCH or internalBullBOS
+    orderFlow := 1
+else if internalBearCHoCH or internalBearBOS
     orderFlow := -1
 
-// Persist the latest confirmed structure event for the dashboard and future modules.
-if bullMSS
+// Publish one deterministic dashboard event per bar. External events take priority.
+if externalBullCHoCH
     latestStructureEvent := "Bullish CHoCH"
-    latestStructureLevel := lastIntHigh
+    latestStructureLevel := lastExtHigh
     latestStructureBar := bar_index
-    latestStructureExternal := false
-else if bearMSS
+    latestStructureExternal := true
+else if externalBearCHoCH
     latestStructureEvent := "Bearish CHoCH"
-    latestStructureLevel := lastIntLow
+    latestStructureLevel := lastExtLow
     latestStructureBar := bar_index
-    latestStructureExternal := false
-else if bullExternalBOS
+    latestStructureExternal := true
+else if externalBullBOS
     latestStructureEvent := "Bullish BOS"
     latestStructureLevel := lastExtHigh
     latestStructureBar := bar_index
     latestStructureExternal := true
-else if bearExternalBOS
+else if externalBearBOS
     latestStructureEvent := "Bearish BOS"
     latestStructureLevel := lastExtLow
     latestStructureBar := bar_index
     latestStructureExternal := true
-else if bullInternalBOS
+else if internalBullCHoCH
+    latestStructureEvent := "Bullish CHoCH"
+    latestStructureLevel := lastIntHigh
+    latestStructureBar := bar_index
+    latestStructureExternal := false
+else if internalBearCHoCH
+    latestStructureEvent := "Bearish CHoCH"
+    latestStructureLevel := lastIntLow
+    latestStructureBar := bar_index
+    latestStructureExternal := false
+else if internalBullBOS
     latestStructureEvent := "Bullish BOS"
     latestStructureLevel := lastIntHigh
     latestStructureBar := bar_index
     latestStructureExternal := false
-else if bearInternalBOS
+else if internalBearBOS
     latestStructureEvent := "Bearish BOS"
     latestStructureLevel := lastIntLow
     latestStructureBar := bar_index
     latestStructureExternal := false
+
+// Stable outputs for downstream modules.
+bullStructureEvent = internalBullCHoCH or internalBullBOS or externalBullCHoCH or externalBullBOS
+bearStructureEvent = internalBearCHoCH or internalBearBOS or externalBearCHoCH or externalBearBOS
+externalStructureEvent = externalBullCHoCH or externalBearCHoCH or externalBullBOS or externalBearBOS
 
 //=============================================================================
 // 9. ORDER BLOCK / FVG CANDIDATES
@@ -550,8 +600,6 @@ bearFVGBottomCandidate = bearFVGNow ? high : na
 // 10. SCORE + QUALIFICATION
 // Bias 25, liquidity 20, displacement 15, MSS/BOS 20, OB 10, FVG 5, time 5.
 //=============================================================================
-bullStructureEvent = bullMSS or bullExternalBOS or bullInternalBOS
-bearStructureEvent = bearMSS or bearExternalBOS or bearInternalBOS
 
 bullOBOK = not na(bullOBOffset)
 bearOBOK = not na(bearOBOffset)
@@ -629,17 +677,21 @@ addStructureMark(string txt, int swingBar, float level, color markColor, bool ex
             line.delete(array.shift(structureLines))
             label.delete(array.shift(structureLabels))
 
-if showInternalEvents and bullMSS
+if showInternalEvents and internalBullCHoCH
     addStructureMark("CHoCH", lastIntHighBar, lastIntHigh, chochBullColor, false)
-if showInternalEvents and bearMSS
+if showInternalEvents and internalBearCHoCH
     addStructureMark("CHoCH", lastIntLowBar, lastIntLow, chochBearColor, false)
-if showInternalEvents and bullInternalBOS
+if showInternalEvents and internalBullBOS
     addStructureMark("BOS", lastIntHighBar, lastIntHigh, bullColor, false)
-if showInternalEvents and bearInternalBOS
+if showInternalEvents and internalBearBOS
     addStructureMark("BOS", lastIntLowBar, lastIntLow, bearColor, false)
-if showExternalEvents and bullExternalBOS
+if showExternalEvents and externalBullCHoCH
+    addStructureMark("CHoCH", lastExtHighBar, lastExtHigh, chochBullColor, true)
+if showExternalEvents and externalBearCHoCH
+    addStructureMark("CHoCH", lastExtLowBar, lastExtLow, chochBearColor, true)
+if showExternalEvents and externalBullBOS
     addStructureMark("BOS", lastExtHighBar, lastExtHigh, bullColor, true)
-if showExternalEvents and bearExternalBOS
+if showExternalEvents and externalBearBOS
     addStructureMark("BOS", lastExtLowBar, lastExtLow, bearColor, true)
 
 //=============================================================================
@@ -905,7 +957,7 @@ var table dash = table.new(position.top_right, 2, 30, border_width = 1, border_c
 
 if barstate.islast and showDashboard
     table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-    table.cell(dash, 1, 0, "v1.0 A3", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+    table.cell(dash, 1, 0, "v1.0 MSE 2.0", text_color = color.white, bgcolor = panelColor, text_size = size.small)
     table.cell(dash, 0, 1, "INSTITUTIONAL EDGE", text_color = neutralColor, bgcolor = panelColor, text_size = size.tiny)
     table.cell(dash, 1, 1, "", bgcolor = panelColor)
 
