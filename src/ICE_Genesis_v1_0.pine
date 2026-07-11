@@ -1,6 +1,6 @@
 //@version=6
 indicator(
-     "ICE Genesis v1.0 - Market Structure Engine 2.0",
+     "ICE Genesis v1.0 - Decision Engine PR2",
      shorttitle = "ICE Genesis",
      overlay = true,
      max_labels_count = 250,
@@ -36,6 +36,9 @@ groupVisual    = "9. Visuals"
 
 showDashboard   = input.bool(true, "Show dashboard", group = groupCore)
 minimumScore    = input.int(75, "Minimum setup score", minval = 0, maxval = 100, step = 5, group = groupCore)
+minimumScoreSeparation = input.int(15, "Minimum bull / bear score separation", minval = 0, maxval = 50, step = 5, group = groupCore)
+requireOTEForDecision = input.bool(false, "Require OTE for BUY / SELL", group = groupCore)
+requireHTFForDecision = input.bool(false, "Require HTF alignment for BUY / SELL", group = groupCore)
 maxLabels       = input.int(14, "Maximum structure labels", minval = 2, maxval = 50, group = groupCore)
 maxLiquidityMarks = input.int(4, "Maximum liquidity marks", minval = 1, maxval = 20, group = groupCore)
 
@@ -830,6 +833,177 @@ if fvgFilled
         box.set_bgcolor(activeFVG, color.new(fvgColor, 93))
 
 //=============================================================================
+// 13. DECISION ENGINE 2.0 — PR2
+// One source of truth for dashboard, trade plan, setup markers, and alerts.
+//=============================================================================
+extRangeValidDecision = not na(lastExtHigh) and not na(lastExtLow) and lastExtHigh > lastExtLow
+decisionRange = extRangeValidDecision ? lastExtHigh - lastExtLow : na
+
+// Directional OTE zones. Bullish OTE is measured high-to-low; bearish OTE low-to-high.
+bullOTEUpper = extRangeValidDecision ? lastExtHigh - decisionRange * 0.618 : na
+bullOTELower = extRangeValidDecision ? lastExtHigh - decisionRange * 0.79 : na
+bearOTELower = extRangeValidDecision ? lastExtLow + decisionRange * 0.618 : na
+bearOTEUpper = extRangeValidDecision ? lastExtLow + decisionRange * 0.79 : na
+
+bullOTEState = extRangeValidDecision and close <= bullOTEUpper and close >= bullOTELower
+bearOTEState = extRangeValidDecision and close >= bearOTELower and close <= bearOTEUpper
+
+// Shared engine states consumed by the Decision Engine.
+bullLiquidityState = recentSSLSweep
+bearLiquidityState = recentBSLSweep
+bullDisplacementState = recentBullDisplacement
+bearDisplacementState = recentBearDisplacement
+bullStructureState = orderFlow == 1 and str.contains(latestStructureEvent, "Bullish")
+bearStructureState = orderFlow == -1 and str.contains(latestStructureEvent, "Bearish")
+bullOBState = obActive and activeBullish
+bearOBState = obActive and not activeBullish
+bullFVGState = fvgActive and activeBullish
+bearFVGState = fvgActive and not activeBullish
+bullHTFState = bullBias
+bearHTFState = bearBias
+
+// Decision Engine 2.0 default weights: liquidity 20, displacement 20,
+// structure 20, fresh OB 15, active FVG 10, OTE 10, HTF 5.
+decisionBullScore = (bullLiquidityState ? 20 : 0) +
+     (bullDisplacementState ? 20 : 0) +
+     (bullStructureState ? 20 : 0) +
+     (bullOBState ? 15 : 0) +
+     (bullFVGState ? 10 : 0) +
+     (bullOTEState ? 10 : 0) +
+     (bullHTFState ? 5 : 0)
+
+decisionBearScore = (bearLiquidityState ? 20 : 0) +
+     (bearDisplacementState ? 20 : 0) +
+     (bearStructureState ? 20 : 0) +
+     (bearOBState ? 15 : 0) +
+     (bearFVGState ? 10 : 0) +
+     (bearOTEState ? 10 : 0) +
+     (bearHTFState ? 5 : 0)
+
+liquidityGateEnabled = requireSweepBeforeBOS or requireSweepBeforeMSS
+bullMandatoryReady = bullStructureState and bullDisplacementState and bullOBState and
+     (not liquidityGateEnabled or bullLiquidityState) and
+     (not requireFVGForSetup or bullFVGState) and
+     (not requireOTEForDecision or bullOTEState) and
+     (not requireHTFForDecision or bullHTFState)
+
+bearMandatoryReady = bearStructureState and bearDisplacementState and bearOBState and
+     (not liquidityGateEnabled or bearLiquidityState) and
+     (not requireFVGForSetup or bearFVGState) and
+     (not requireOTEForDecision or bearOTEState) and
+     (not requireHTFForDecision or bearHTFState)
+
+scoreSeparation = math.abs(decisionBullScore - decisionBearScore)
+bothScoresHigh = decisionBullScore >= minimumScore and decisionBearScore >= minimumScore
+structureOBConflict = (bullStructureState and bearOBState) or (bearStructureState and bullOBState)
+strictHTFConflict = requireHTFForDecision and ((bullStructureState and bearHTFState) or (bearStructureState and bullHTFState))
+closeEvidenceConflict = decisionBullScore >= 40 and decisionBearScore >= 40 and scoreSeparation < minimumScoreSeparation
+decisionConflict = bothScoresHigh or closeEvidenceConflict or structureOBConflict or strictHTFConflict
+
+decisionLongReady = bullMandatoryReady and decisionBullScore >= minimumScore and
+     decisionBullScore > decisionBearScore and scoreSeparation >= minimumScoreSeparation and not decisionConflict
+decisionShortReady = bearMandatoryReady and decisionBearScore >= minimumScore and
+     decisionBearScore > decisionBullScore and scoreSeparation >= minimumScoreSeparation and not decisionConflict
+
+// Select the side that owns current structure; otherwise use the stronger evidence score.
+decisionDirection = orderFlow == 1 ? 1 : orderFlow == -1 ? -1 : decisionBullScore > decisionBearScore ? 1 : decisionBearScore > decisionBullScore ? -1 : 0
+decisionScore = decisionLongReady ? decisionBullScore : decisionShortReady ? decisionBearScore :
+     decisionDirection == 1 ? decisionBullScore : decisionDirection == -1 ? decisionBearScore : math.max(decisionBullScore, decisionBearScore)
+
+gradeFromDecisionScore(int score) =>
+    score >= 95 ? "A+" : score >= 90 ? "A" : score >= 85 ? "B+" : score >= 80 ? "B" : score >= 70 ? "C" : "PASS"
+
+decisionGrade = gradeFromDecisionScore(decisionScore)
+
+string decisionRecommendation = "WAIT"
+string decisionMissing = "No valid directional sequence"
+string decisionStage = "LIQUIDITY"
+
+if decisionConflict
+    decisionRecommendation := "NO TRADE — CONFLICT"
+    decisionMissing := structureOBConflict ? "Structure conflicts with the active order block" : strictHTFConflict ? "Higher-timeframe bias conflicts with structure" : bothScoresHigh ? "Bullish and bearish setups both score above the threshold" : "Bullish and bearish evidence is too close"
+    decisionStage := "CONFLICT"
+else if decisionLongReady
+    decisionRecommendation := "BUY"
+    decisionMissing := "All required conditions confirmed"
+    decisionStage := "ENTRY READY"
+else if decisionShortReady
+    decisionRecommendation := "SELL"
+    decisionMissing := "All required conditions confirmed"
+    decisionStage := "ENTRY READY"
+else if decisionDirection == 1
+    decisionRecommendation := liquidityGateEnabled and not bullLiquidityState ? "WAIT FOR LIQUIDITY" :
+         not bullDisplacementState ? "WAIT FOR DISPLACEMENT" :
+         not bullStructureState ? "WAIT FOR STRUCTURE" :
+         not bullOBState ? "WAIT FOR ORDER BLOCK" :
+         requireFVGForSetup and not bullFVGState ? "WAIT FOR FVG" :
+         requireOTEForDecision and not bullOTEState ? "WAIT FOR OTE" :
+         requireHTFForDecision and not bullHTFState ? "WAIT FOR HTF" : "PREPARING"
+    decisionMissing := liquidityGateEnabled and not bullLiquidityState ? "Sell-side liquidity sweep" :
+         not bullDisplacementState ? "Bullish displacement" :
+         not bullStructureState ? "Bullish BOS / CHoCH" :
+         not bullOBState ? "Fresh bullish order block" :
+         requireFVGForSetup and not bullFVGState ? "Active bullish FVG" :
+         requireOTEForDecision and not bullOTEState ? "Bullish OTE retracement" :
+         requireHTFForDecision and not bullHTFState ? "Bullish HTF alignment" : "Score / separation threshold"
+    decisionStage := liquidityGateEnabled and not bullLiquidityState ? "LIQUIDITY" :
+         not bullDisplacementState ? "DISPLACEMENT" :
+         not bullStructureState ? "STRUCTURE" :
+         not bullOBState ? "ORDER BLOCK" :
+         requireFVGForSetup and not bullFVGState ? "FVG" :
+         requireOTEForDecision and not bullOTEState ? "OTE" : "ENTRY"
+else if decisionDirection == -1
+    decisionRecommendation := liquidityGateEnabled and not bearLiquidityState ? "WAIT FOR LIQUIDITY" :
+         not bearDisplacementState ? "WAIT FOR DISPLACEMENT" :
+         not bearStructureState ? "WAIT FOR STRUCTURE" :
+         not bearOBState ? "WAIT FOR ORDER BLOCK" :
+         requireFVGForSetup and not bearFVGState ? "WAIT FOR FVG" :
+         requireOTEForDecision and not bearOTEState ? "WAIT FOR OTE" :
+         requireHTFForDecision and not bearHTFState ? "WAIT FOR HTF" : "PREPARING"
+    decisionMissing := liquidityGateEnabled and not bearLiquidityState ? "Buy-side liquidity sweep" :
+         not bearDisplacementState ? "Bearish displacement" :
+         not bearStructureState ? "Bearish BOS / CHoCH" :
+         not bearOBState ? "Fresh bearish order block" :
+         requireFVGForSetup and not bearFVGState ? "Active bearish FVG" :
+         requireOTEForDecision and not bearOTEState ? "Bearish OTE retracement" :
+         requireHTFForDecision and not bearHTFState ? "Bearish HTF alignment" : "Score / separation threshold"
+    decisionStage := liquidityGateEnabled and not bearLiquidityState ? "LIQUIDITY" :
+         not bearDisplacementState ? "DISPLACEMENT" :
+         not bearStructureState ? "STRUCTURE" :
+         not bearOBState ? "ORDER BLOCK" :
+         requireFVGForSetup and not bearFVGState ? "FVG" :
+         requireOTEForDecision and not bearOTEState ? "OTE" : "ENTRY"
+
+decisionLongSignal = decisionLongReady and not decisionLongReady[1]
+decisionShortSignal = decisionShortReady and not decisionShortReady[1]
+
+// Plain-language outputs used by the dashboard and future alerts.
+decisionBiasText = decisionDirection == 1 ? "Bullish" : decisionDirection == -1 ? "Bearish" : "Neutral"
+decisionNextStep = decisionLongReady ? "Execute only under your trade plan" :
+     decisionShortReady ? "Execute only under your trade plan" :
+     decisionConflict ? "Wait until directional evidence agrees" :
+     decisionDirection == 1 and liquidityGateEnabled and not bullLiquidityState ? "Wait for an SSL sweep" :
+     decisionDirection == -1 and liquidityGateEnabled and not bearLiquidityState ? "Wait for a BSL sweep" :
+     decisionDirection == 1 and not bullDisplacementState ? "Wait for bullish displacement" :
+     decisionDirection == -1 and not bearDisplacementState ? "Wait for bearish displacement" :
+     decisionDirection == 1 and not bullStructureState ? "Wait for bullish BOS / CHoCH" :
+     decisionDirection == -1 and not bearStructureState ? "Wait for bearish BOS / CHoCH" :
+     decisionDirection == 1 and not bullOBState ? "Wait for a fresh bullish order block" :
+     decisionDirection == -1 and not bearOBState ? "Wait for a fresh bearish order block" :
+     decisionDirection == 1 and requireFVGForSetup and not bullFVGState ? "Wait for an active bullish FVG" :
+     decisionDirection == -1 and requireFVGForSetup and not bearFVGState ? "Wait for an active bearish FVG" :
+     decisionDirection == 1 and requireOTEForDecision and not bullOTEState ? "Wait for bullish OTE retracement" :
+     decisionDirection == -1 and requireOTEForDecision and not bearOTEState ? "Wait for bearish OTE retracement" :
+     decisionDirection == 1 and requireHTFForDecision and not bullHTFState ? "Wait for bullish HTF alignment" :
+     decisionDirection == -1 and requireHTFForDecision and not bearHTFState ? "Wait for bearish HTF alignment" : "Wait for stronger confirmation"
+
+decisionStory = decisionConflict ? decisionMissing :
+     decisionLongReady ? "Bullish setup is fully confirmed" :
+     decisionShortReady ? "Bearish setup is fully confirmed" :
+     decisionDirection == 1 ? "Bullish evidence is developing" :
+     decisionDirection == -1 ? "Bearish evidence is developing" : "No directional setup owns the market"
+
+//=============================================================================
 // 13. TRADE PLAN
 //=============================================================================
 var line entryLine = na
@@ -848,11 +1022,11 @@ clearTradePlan() =>
     line.delete(targetLine)
     label.delete(tradeLabel)
 
-if showTradePlan and bullQualified
+if showTradePlan and decisionLongSignal
     clearTradePlan()
 
     float entry = entryMode == "OB Proximal" ? activeOBTop :
-         entryMode == "FVG Midpoint" ? (activeFVGTop + activeFVGBottom) / 2.0 :
+         entryMode == "FVG Midpoint" and fvgActive ? (activeFVGTop + activeFVGBottom) / 2.0 :
          (activeOBTop + activeOBBottom) / 2.0
 
     float stop = activeOBBottom - atr * stopBufferATR
@@ -869,18 +1043,18 @@ if showTradePlan and bullQualified
     targetLine := line.new(bar_index, target, bar_index + 20, target, xloc = xloc.bar_index, color = bullColor, style = line.style_dotted)
     tradeLabel := label.new(
          bar_index + 20, entry,
-         "BUY  " + str.tostring(bullScore) + "%\nE " + str.tostring(entry, format.mintick) +
+         "BUY  " + str.tostring(decisionScore) + "%\nE " + str.tostring(entry, format.mintick) +
          "\nSL " + str.tostring(stop, format.mintick) +
          "\nTP " + str.tostring(target, format.mintick),
          xloc = xloc.bar_index, yloc = yloc.price,
          style = label.style_label_left, color = bullColor, textcolor = color.white
      )
 
-if showTradePlan and bearQualified
+if showTradePlan and decisionShortSignal
     clearTradePlan()
 
     float entry = entryMode == "OB Proximal" ? activeOBBottom :
-         entryMode == "FVG Midpoint" ? (activeFVGTop + activeFVGBottom) / 2.0 :
+         entryMode == "FVG Midpoint" and fvgActive ? (activeFVGTop + activeFVGBottom) / 2.0 :
          (activeOBTop + activeOBBottom) / 2.0
 
     float stop = activeOBTop + atr * stopBufferATR
@@ -897,15 +1071,28 @@ if showTradePlan and bearQualified
     targetLine := line.new(bar_index, target, bar_index + 20, target, xloc = xloc.bar_index, color = bullColor, style = line.style_dotted)
     tradeLabel := label.new(
          bar_index + 20, entry,
-         "SELL  " + str.tostring(bearScore) + "%\nE " + str.tostring(entry, format.mintick) +
+         "SELL  " + str.tostring(decisionScore) + "%\nE " + str.tostring(entry, format.mintick) +
          "\nSL " + str.tostring(stop, format.mintick) +
          "\nTP " + str.tostring(target, format.mintick),
          xloc = xloc.bar_index, yloc = yloc.price,
          style = label.style_label_left, color = bearColor, textcolor = color.white
      )
 
-plotshape(showSetupArrows and visualMode != "Minimal" and bullQualified, "Qualified bullish Genesis setup", shape.triangleup, location.belowbar, bullColor, size = size.small, text = "ICE")
-plotshape(showSetupArrows and visualMode != "Minimal" and bearQualified, "Qualified bearish Genesis setup", shape.triangledown, location.abovebar, bearColor, size = size.small, text = "ICE")
+// Remove stale plans as soon as the centralized decision is no longer BUY or SELL.
+if lastPlanDirection != "WAIT" and not decisionLongReady and not decisionShortReady
+    clearTradePlan()
+    entryLine := na
+    stopLine := na
+    targetLine := na
+    tradeLabel := na
+    lastPlanEntry := na
+    lastPlanStop := na
+    lastPlanTarget := na
+    lastPlanRR := na
+    lastPlanDirection := "WAIT"
+
+plotshape(showSetupArrows and visualMode != "Minimal" and decisionLongSignal, "Qualified bullish Genesis setup", shape.triangleup, location.belowbar, bullColor, size = size.small, text = "ICE")
+plotshape(showSetupArrows and visualMode != "Minimal" and decisionShortSignal, "Qualified bearish Genesis setup", shape.triangledown, location.abovebar, bearColor, size = size.small, text = "ICE")
 
 //=============================================================================
 // 14. OPTIONAL HTF LEVELS
@@ -916,28 +1103,10 @@ plot(showHTFLevels ? htfProtectedLow : na, "HTF Protected Low", color = color.ne
 //=============================================================================
 // 15. INSTITUTIONAL DASHBOARD
 //=============================================================================
-gradeFromScore(int score) =>
-    score >= 95 ? "A+" : score >= 90 ? "A" : score >= 85 ? "B+" : score >= 80 ? "B" : score >= 70 ? "C" : "PASS"
-
-var int lastScore = 0
-var string lastDecision = "WAIT"
-var string lastGrade = "-"
-var string lastStructureText = "Waiting"
-var string lastOBValidationText = "Waiting"
-
-if bullStructureEvent
-    lastScore := bullScore
-    lastDecision := bullQualified ? "LONG" : "WAIT"
-    lastGrade := gradeFromScore(bullScore)
-    lastStructureText := bullMSS ? "Bullish CHoCH" : "Bullish BOS"
-    lastOBValidationText := bullInstitutionalOB ? (bullOBFVGOverlap ? "Valid + overlap" : "Valid") : "Rejected"
-
-if bearStructureEvent
-    lastScore := bearScore
-    lastDecision := bearQualified ? "SHORT" : "WAIT"
-    lastGrade := gradeFromScore(bearScore)
-    lastStructureText := bearMSS ? "Bearish CHoCH" : "Bearish BOS"
-    lastOBValidationText := bearInstitutionalOB ? (bearOBFVGOverlap ? "Valid + overlap" : "Valid") : "Rejected"
+// Decision Engine owns the user-facing score, grade, and recommendation.
+lastScore = decisionScore
+lastDecision = decisionRecommendation
+lastGrade = decisionGrade
 
 flowText = orderFlow == 1 ? "Bullish" : orderFlow == -1 ? "Bearish" : "Undetermined"
 zoneText = obActive ? (activeBullish ? "Bullish OB" : "Bearish OB") : "Waiting"
@@ -953,11 +1122,11 @@ ote618 = extRangeValid ? oteHigh - (oteHigh - oteLow) * 0.618 : na
 
 check(bool condition, string yesText, string noText) => condition ? "●  " + yesText : "○  " + noText
 
-var table dash = table.new(position.top_right, 2, 30, border_width = 1, border_color = color.new(neutralColor, 65))
+var table dash = table.new(position.top_right, 2, 34, border_width = 1, border_color = color.new(neutralColor, 65))
 
 if barstate.islast and showDashboard
     table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-    table.cell(dash, 1, 0, "v1.0 MSE 2.0", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+    table.cell(dash, 1, 0, "v1.0 DEC PR2", text_color = color.white, bgcolor = panelColor, text_size = size.small)
     table.cell(dash, 0, 1, "INSTITUTIONAL EDGE", text_color = neutralColor, bgcolor = panelColor, text_size = size.tiny)
     table.cell(dash, 1, 1, "", bgcolor = panelColor)
 
@@ -974,12 +1143,12 @@ if barstate.islast and showDashboard
 
     table.cell(dash, 0, 7, "SETUP CHECKLIST", text_color = color.white, bgcolor = color.new(color.black, 0))
     table.cell(dash, 1, 7, "", bgcolor = color.new(color.black, 0))
-    bool directionBull = orderFlow == 1
+    bool directionBull = decisionDirection == 1
     table.cell(dash, 0, 8, "1. Liquidity", text_color = neutralColor, bgcolor = panelColor)
-    table.cell(dash, 1, 8, check(directionBull ? recentSSLSweep : recentBSLSweep, directionBull ? "SSL Swept" : "BSL Swept", "Waiting"), text_color = (recentSSLSweep or recentBSLSweep) ? bullColor : neutralColor, bgcolor = panelColor)
+    table.cell(dash, 1, 8, check(directionBull ? recentSSLSweep : recentBSLSweep, directionBull ? "SSL Swept" : "BSL Swept", directionBull ? "Waiting for SSL" : "Waiting for BSL"), text_color = (recentSSLSweep or recentBSLSweep) ? bullColor : neutralColor, bgcolor = panelColor)
     table.cell(dash, 0, 9, "2. Displacement", text_color = neutralColor, bgcolor = panelColor)
     bool dashboardDisplacement = directionBull ? recentBullDisplacement : recentBearDisplacement
-    table.cell(dash, 1, 9, check(dashboardDisplacement, "Strong", "Waiting"), text_color = dashboardDisplacement ? bullColor : neutralColor, bgcolor = panelColor)
+    table.cell(dash, 1, 9, check(dashboardDisplacement, "Strong", directionBull ? "Waiting bullish" : "Waiting bearish"), text_color = dashboardDisplacement ? bullColor : neutralColor, bgcolor = panelColor)
     table.cell(dash, 0, 10, "3. Structure", text_color = neutralColor, bgcolor = panelColor)
     table.cell(dash, 1, 10, latestStructureEvent, text_color = str.contains(latestStructureEvent, "Bullish") ? bullColor : str.contains(latestStructureEvent, "Bearish") ? bearColor : neutralColor, bgcolor = panelColor)
     table.cell(dash, 0, 11, "4. Order Block", text_color = neutralColor, bgcolor = panelColor)
@@ -996,7 +1165,7 @@ if barstate.islast and showDashboard
     table.cell(dash, 0, 16, "TRADE DECISION", text_color = color.white, bgcolor = color.new(color.black, 0))
     table.cell(dash, 1, 16, "", bgcolor = color.new(color.black, 0))
     table.cell(dash, 0, 17, "Bias", text_color = neutralColor, bgcolor = panelColor)
-    table.cell(dash, 1, 17, lastDecision, text_color = lastDecision == "LONG" ? bullColor : lastDecision == "SHORT" ? bearColor : neutralColor, bgcolor = panelColor, text_size = size.large)
+    table.cell(dash, 1, 17, lastDecision, text_color = lastDecision == "BUY" ? bullColor : lastDecision == "SELL" ? bearColor : neutralColor, bgcolor = panelColor, text_size = size.large)
     table.cell(dash, 0, 18, "Score", text_color = neutralColor, bgcolor = panelColor)
     table.cell(dash, 1, 18, str.tostring(lastScore) + "%", text_color = lastScore >= minimumScore ? bullColor : neutralColor, bgcolor = panelColor)
     table.cell(dash, 0, 19, "Grade", text_color = neutralColor, bgcolor = panelColor)
@@ -1021,11 +1190,20 @@ if barstate.islast and showDashboard
     table.cell(dash, 1, 27, showSmartTradePanel and not na(lastPlanTarget) ? str.tostring(lastPlanTarget, format.mintick) : "—", text_color = bullColor, bgcolor = panelColor)
     table.cell(dash, 0, 28, "Risk : Reward", text_color = neutralColor, bgcolor = panelColor)
     table.cell(dash, 1, 28, showSmartTradePanel and not na(lastPlanRR) ? "1 : " + str.tostring(lastPlanRR, "#.##") : "—", text_color = color.white, bgcolor = panelColor)
-    table.cell(dash, 0, 29, "Structure Module", text_color = neutralColor, bgcolor = panelColor)
-    table.cell(dash, 1, 29, latestStructureExternal ? "External confirmed" : latestStructureEvent == "Waiting" ? "Waiting" : "Internal confirmed", text_color = latestStructureEvent == "Waiting" ? neutralColor : color.white, bgcolor = panelColor)
+    table.cell(dash, 0, 29, "Next Step", text_color = neutralColor, bgcolor = panelColor)
+    table.cell(dash, 1, 29, decisionNextStep, text_color = decisionRecommendation == "BUY" ? bullColor : decisionRecommendation == "SELL" ? bearColor : neutralColor, bgcolor = panelColor, text_size = size.tiny)
+
+    table.cell(dash, 0, 30, "DECISION EXPLANATION", text_color = color.white, bgcolor = color.new(color.black, 0))
+    table.cell(dash, 1, 30, "", bgcolor = color.new(color.black, 0))
+    table.cell(dash, 0, 31, "Directional Bias", text_color = neutralColor, bgcolor = panelColor)
+    table.cell(dash, 1, 31, decisionBiasText, text_color = decisionDirection == 1 ? bullColor : decisionDirection == -1 ? bearColor : neutralColor, bgcolor = panelColor)
+    table.cell(dash, 0, 32, "Market Story", text_color = neutralColor, bgcolor = panelColor)
+    table.cell(dash, 1, 32, decisionStory, text_color = neutralColor, bgcolor = panelColor, text_size = size.tiny)
+    table.cell(dash, 0, 33, "Bull / Bear Evidence", text_color = neutralColor, bgcolor = panelColor)
+    table.cell(dash, 1, 33, str.tostring(decisionBullScore) + "% / " + str.tostring(decisionBearScore) + "%", text_color = decisionBullScore > decisionBearScore ? bullColor : decisionBearScore > decisionBullScore ? bearColor : neutralColor, bgcolor = panelColor)
 
 if barstate.islast and not showDashboard
-    table.clear(dash, 0, 0, 1, 29)
+    table.clear(dash, 0, 0, 1, 33)
 
 //=============================================================================
 // 16. ALERTS
@@ -1040,5 +1218,5 @@ alertcondition(bullOBZoneSignal, "ICE Genesis: Bullish highlighted OB zone", "IC
 alertcondition(bearOBZoneSignal, "ICE Genesis: Bearish highlighted OB zone", "ICE Genesis highlighted a bearish order-block zone on {{ticker}} {{interval}}.")
 alertcondition(bullStructureEvent and bullInstitutionalOB, "ICE Genesis: Bullish institutional OB", "ICE Genesis validated a bullish institutional order block on {{ticker}} {{interval}}.")
 alertcondition(bearStructureEvent and bearInstitutionalOB, "ICE Genesis: Bearish institutional OB", "ICE Genesis validated a bearish institutional order block on {{ticker}} {{interval}}.")
-alertcondition(bullQualified, "ICE Genesis: Qualified bullish setup", "ICE Genesis qualified a bullish setup on {{ticker}} {{interval}}.")
-alertcondition(bearQualified, "ICE Genesis: Qualified bearish setup", "ICE Genesis qualified a bearish setup on {{ticker}} {{interval}}.")
+alertcondition(decisionLongSignal, "ICE Genesis: Decision BUY", "ICE Genesis Decision Engine confirmed a BUY setup on {{ticker}} {{interval}}.")
+alertcondition(decisionShortSignal, "ICE Genesis: Decision SELL", "ICE Genesis Decision Engine confirmed a SELL setup on {{ticker}} {{interval}}.")
