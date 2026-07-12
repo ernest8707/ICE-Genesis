@@ -1,8 +1,7 @@
 //@version=6
 indicator(
      "ICE Genesis v1.0 - Decision Engine PR2",
-     shorttitle = "ICE Genesis",
-     overlay = true,
+shorttitle = "ICEGen",     overlay = true,
      max_labels_count = 250,
      max_lines_count = 200,
      max_boxes_count = 100
@@ -33,8 +32,9 @@ groupZones     = "6. Order Block / FVG"
 groupTime      = "7. Time Alignment"
 groupRisk      = "8. Trade Plan"
 groupVisual    = "9. Visuals"
-
-showDashboard   = input.bool(true, "Show dashboard", group = groupCore)
+groupDashboard = "10. Adaptive Dashboard"
+showDashboard = input.bool(true, "Show dashboard", group = groupCore)
+dashboardMode = input.string("Full", "Dashboard mode", options = ["Full", "Compact", "Minimal", "Off"], group = groupDashboard)
 minimumScore    = input.int(75, "Minimum setup score", minval = 0, maxval = 100, step = 5, group = groupCore)
 minimumScoreSeparation = input.int(15, "Minimum bull / bear score separation", minval = 0, maxval = 50, step = 5, group = groupCore)
 requireOTEForDecision = input.bool(false, "Require OTE for BUY / SELL", group = groupCore)
@@ -1121,10 +1121,10 @@ ote79 = extRangeValid ? oteHigh - (oteHigh - oteLow) * 0.79 : na
 ote618 = extRangeValid ? oteHigh - (oteHigh - oteLow) * 0.618 : na
 
 check(bool condition, string yesText, string noText) => condition ? "●  " + yesText : "○  " + noText
-
+dashboardEnabled = showDashboard and dashboardMode != "Off"
 var table dash = table.new(position.top_right, 2, 34, border_width = 1, border_color = color.new(neutralColor, 65))
 
-if barstate.islast and showDashboard
+if barstate.islast and dashboardEnabled    
     table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
     table.cell(dash, 1, 0, "v1.0 DEC PR2", text_color = color.white, bgcolor = panelColor, text_size = size.small)
     table.cell(dash, 0, 1, "INSTITUTIONAL EDGE", text_color = neutralColor, bgcolor = panelColor, text_size = size.tiny)
@@ -1202,7 +1202,7 @@ if barstate.islast and showDashboard
     table.cell(dash, 0, 33, "Bull / Bear Evidence", text_color = neutralColor, bgcolor = panelColor)
     table.cell(dash, 1, 33, str.tostring(decisionBullScore) + "% / " + str.tostring(decisionBearScore) + "%", text_color = decisionBullScore > decisionBearScore ? bullColor : decisionBearScore > decisionBullScore ? bearColor : neutralColor, bgcolor = panelColor)
 
-if barstate.islast and not showDashboard
+if barstate.islast and not dashboardEnabled    
     table.clear(dash, 0, 0, 1, 33)
 
 //=============================================================================
