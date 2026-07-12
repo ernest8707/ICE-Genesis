@@ -33,8 +33,65 @@ groupTime      = "7. Time Alignment"
 groupRisk      = "8. Trade Plan"
 groupVisual    = "9. Visuals"
 groupDashboard = "10. Adaptive Dashboard"
+groupInstitutionalBias = "11. Institutional Bias"
 showDashboard = input.bool(true, "Show dashboard", group = groupCore)
 dashboardMode = input.string("Full", "Dashboard mode", options = ["Full", "Compact", "Minimal", "Off"], group = groupDashboard)
+enableInstitutionalBias = input.bool(
+     true,
+     "Enable Institutional Bias Engine",
+     group = groupInstitutionalBias
+)
+
+anchorBiasTimeframe = input.timeframe(
+     "D",
+     "Anchor Bias Timeframe",
+     group = groupInstitutionalBias
+)
+
+trendBiasTimeframe = input.timeframe(
+     "240",
+     "Trend Bias Timeframe",
+     group = groupInstitutionalBias
+)
+
+executionBiasTimeframe = input.timeframe(
+     "60",
+     "Execution Bias Timeframe",
+     group = groupInstitutionalBias
+)
+
+requireAnchorAlignment = input.bool(
+     true,
+     "Require Anchor Bias Alignment",
+     group = groupInstitutionalBias
+)
+
+requireTrendAlignment = input.bool(
+     true,
+     "Require Trend Bias Alignment",
+     group = groupInstitutionalBias
+)
+
+requireExecutionAlignment = input.bool(
+     true,
+     "Require Execution Bias Alignment",
+     group = groupInstitutionalBias
+)
+
+allowCountertrendSetups = input.bool(
+     false,
+     "Allow Countertrend Setups",
+     group = groupInstitutionalBias
+)
+
+countertrendScorePenalty = input.int(
+     30,
+     "Countertrend Score Penalty",
+     minval = 0,
+     maxval = 100,
+     step = 5,
+     group = groupInstitutionalBias
+)
 minimumScore    = input.int(75, "Minimum setup score", minval = 0, maxval = 100, step = 5, group = groupCore)
 minimumScoreSeparation = input.int(15, "Minimum bull / bear score separation", minval = 0, maxval = 50, step = 5, group = groupCore)
 requireOTEForDecision = input.bool(false, "Require OTE for BUY / SELL", group = groupCore)
