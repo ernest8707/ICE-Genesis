@@ -1,6 +1,6 @@
 //@version=6
 indicator(
-     "ICE Genesis v1.0 - Chart Readability PR1",
+     "ICE Genesis v1.0 - Chart Readability PR2",
 shorttitle = "ICEGen",     overlay = true,
      max_labels_count = 250,
      max_lines_count = 200,
@@ -234,9 +234,9 @@ londonShade = color.new(color.rgb(35, 95, 180), 91)
 newYorkShade = color.new(color.rgb(130, 70, 170), 91)
 
 //=============================================================================
-// 2A. CHART READABILITY LABEL TEXT — PR1
+// 2A. CHART READABILITY LABEL TEXT — PR2
 // Centralized label text for Full / Short / Minimal chart display modes.
-// PR1 only defines the label modes. Later PRs will wire these into labels.
+// PR2 wires liquidity labels into the chart while keeping dashboard wording unchanged.
 //=============================================================================
 labelModeFull = chartLabelMode == "Full"
 labelModeShort = chartLabelMode == "Short"
@@ -483,7 +483,7 @@ newEqualLow = useEqualLiquidity and not na(extPL) and not na(lastExtLow[1]) and 
 addEqualLevel(bool isHigh, float level, int leftBar) =>
     color levelColor = liqColor
     line ln = line.new(leftBar, level, bar_index, level, xloc = xloc.bar_index, extend = extend.right, color = color.new(levelColor, 10), width = 1, style = line.style_dashed)
-    label lb = label.new(bar_index, level, isHigh ? "EQH  Untouched" : "EQL  Untouched", xloc = xloc.bar_index, yloc = yloc.price, style = label.style_none, textcolor = levelColor, size = size.tiny)
+    label lb = label.new(bar_index, level, isHigh ? labelEQHUntouched : labelEQLUntouched, xloc = xloc.bar_index, yloc = yloc.price, style = label.style_none, textcolor = levelColor, size = size.tiny)
     if isHigh
         array.push(eqHighLevels, level)
         array.push(eqHighLines, ln)
@@ -527,7 +527,7 @@ if array.size(eqHighLevels) > 0
             line.set_extend(ln, extend.none)
             line.set_x2(ln, bar_index)
             line.set_color(ln, color.new(bearColor, 25))
-            label.set_text(lb, "EQH  Taken ✓")
+            label.set_text(lb, labelEQHTaken)
             label.set_textcolor(lb, bearColor)
             array.remove(eqHighLevels, i)
             array.remove(eqHighLines, i)
@@ -548,7 +548,7 @@ if array.size(eqLowLevels) > 0
             line.set_extend(ln, extend.none)
             line.set_x2(ln, bar_index)
             line.set_color(ln, color.new(bullColor, 25))
-            label.set_text(lb, "EQL  Taken ✓")
+            label.set_text(lb, labelEQLTaken)
             label.set_textcolor(lb, bullColor)
             array.remove(eqLowLevels, i)
             array.remove(eqLowLines, i)
@@ -592,9 +592,9 @@ addLiquidityMark(string txt, float level, color markColor) =>
             label.delete(array.shift(liquidityLabels))
 
 if buySideSweep
-    addLiquidityMark("BSL  Taken ✓", lastLiquidityLevel, bearColor)
+    addLiquidityMark(labelBSLTaken, lastLiquidityLevel, bearColor)
 if sellSideSweep
-    addLiquidityMark("SSL  Taken ✓", lastLiquidityLevel, bullColor)
+    addLiquidityMark(labelSSLTaken, lastLiquidityLevel, bullColor)
 
 plotshape(showSweepMarks and not showLiquidityLines and buySideSweep, "Buy-side sweep", shape.xcross, location.abovebar, liqColor, size = size.tiny, text = "BSL")
 plotshape(showSweepMarks and not showLiquidityLines and sellSideSweep, "Sell-side sweep", shape.xcross, location.belowbar, liqColor, size = size.tiny, text = "SSL")
@@ -1499,7 +1499,7 @@ if barstate.islast
 
         if isMorningBrief
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 READ PR1", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 READ PR2", text_color = color.white, bgcolor = panelColor, text_size = size.small)
             table.cell(dash, 0, 1, "MORNING BRIEF", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 1, "", bgcolor = color.new(color.black, 0))
 
@@ -1532,7 +1532,7 @@ if barstate.islast
 
         else if isExecutionFocus
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 READ PR1", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 READ PR2", text_color = color.white, bgcolor = panelColor, text_size = size.small)
             table.cell(dash, 0, 1, "EXECUTION FOCUS", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 1, lastDecision, text_color = decisionColor, bgcolor = color.new(color.black, 0), text_size = size.large)
 
@@ -1571,7 +1571,7 @@ if barstate.islast
 
         else if isTradeManagement
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 READ PR1", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 READ PR2", text_color = color.white, bgcolor = panelColor, text_size = size.small)
             table.cell(dash, 0, 1, "TRADE MANAGEMENT", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 1, lastPlanDirection, text_color = lastPlanDirection == "LONG" ? bullColor : lastPlanDirection == "SHORT" ? bearColor : neutralColor, bgcolor = color.new(color.black, 0), text_size = size.large)
 
@@ -1598,7 +1598,7 @@ if barstate.islast
 
         else if isFull
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 READ PR1", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 READ PR2", text_color = color.white, bgcolor = panelColor, text_size = size.small)
 
             table.cell(dash, 0, 1, "FULL DASHBOARD", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 1, "", bgcolor = color.new(color.black, 0))
