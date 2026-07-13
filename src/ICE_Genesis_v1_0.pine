@@ -1,6 +1,6 @@
 //@version=6
 indicator(
-     "ICE Genesis v1.0 - Market Narrative PR4",
+     "ICE Genesis v1.0 - Market Narrative PR5",
 shorttitle = "ICEGen",     overlay = true,
      max_labels_count = 250,
      max_lines_count = 200,
@@ -1101,9 +1101,9 @@ decisionStory = decisionConflict ? decisionMissing :
      decisionDirection == -1 ? "Bearish evidence is developing" : "No directional setup owns the market"
 
 //=============================================================================
-// 13A. MARKET NARRATIVE ENGINE — PR4
-// Converts existing engine states into a prioritized institutional story.
-// PR4 improves dashboard briefing readability without changing BUY / SELL logic.
+// 13A. MARKET NARRATIVE ENGINE — PR5
+// PR5 adds structured Objective and Next Event dashboard detail without changing BUY / SELL logic.
+// PR5 improves dashboard briefing readability without changing BUY / SELL logic.
 //=============================================================================
 narrativeTrending = math.abs(ema20 - ema50) > atr * 0.25
 
@@ -1328,7 +1328,7 @@ if barstate.islast
 
         if isFull
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 NARR PR4", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 NARR PR5", text_color = color.white, bgcolor = panelColor, text_size = size.small)
             table.cell(dash, 0, 1, "INSTITUTIONAL EDGE", text_color = neutralColor, bgcolor = panelColor, text_size = size.tiny)
             table.cell(dash, 1, 1, "", bgcolor = panelColor)
 
@@ -1395,14 +1395,14 @@ if barstate.islast
             table.cell(dash, 0, 29, "Next Step", text_color = neutralColor, bgcolor = panelColor)
             table.cell(dash, 1, 29, decisionNextStep, text_color = decisionRecommendation == "BUY" ? bullColor : decisionRecommendation == "SELL" ? bearColor : neutralColor, bgcolor = panelColor, text_size = size.tiny)
 
-            table.cell(dash, 0, 30, "DECISION EXPLANATION", text_color = color.white, bgcolor = color.new(color.black, 0))
+            table.cell(dash, 0, 30, "NARRATIVE DETAIL", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 30, "", bgcolor = color.new(color.black, 0))
-            table.cell(dash, 0, 31, "Directional Bias", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 31, decisionBiasText, text_color = decisionDirection == 1 ? bullColor : decisionDirection == -1 ? bearColor : neutralColor, bgcolor = panelColor)
-            table.cell(dash, 0, 32, "Market Story", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 32, decisionStory, text_color = neutralColor, bgcolor = panelColor, text_size = size.tiny)
+            table.cell(dash, 0, 31, "Objective", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 31, currentObjectiveText, text_color = marketDirectionColor, bgcolor = panelColor, text_size = size.tiny)
+            table.cell(dash, 0, 32, "Next Event", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 32, expectedNextEventText, text_color = marketDirectionColor, bgcolor = panelColor, text_size = size.tiny)
             table.cell(dash, 0, 33, "Bull / Bear Evidence", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 33, str.tostring(decisionBullScore) + "% / " + str.tostring(decisionBearScore) + "%", text_color = decisionBullScore > decisionBearScore ? bullColor : decisionBearScore > decisionBullScore ? bearColor : neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 33, str.tostring(decisionBullScore) + "% / " + str.tostring(decisionBearScore) + "%", text_color = decisionBullScore > decisionBearScore ? bullColor : decisionBearScore > decisionBullScore ? bearColor : neutralColor, bgcolor = panelColor) decisionBullScore ? bearColor : neutralColor, bgcolor = panelColor)
         else if isCompact
             table.cell(dash, 0, 0, "ICE", text_color = color.white, bgcolor = panelColor, text_size = size.small)
             table.cell(dash, 1, 0, decisionStage, text_color = decisionStage == "READY" ? bullColor : decisionStage == "CONFLICT" ? bearColor : neutralColor, bgcolor = panelColor, text_size = size.small)
