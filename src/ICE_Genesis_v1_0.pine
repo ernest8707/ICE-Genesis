@@ -1,6 +1,6 @@
 //@version=6
 indicator(
-     "ICE Genesis v1.0 - Execution Engine PR5",
+     "ICE Genesis v1.0 - Chart Readability PR1",
 shorttitle = "ICEGen",     overlay = true,
      max_labels_count = 250,
      max_lines_count = 200,
@@ -207,6 +207,12 @@ showSessionShading = input.bool(true, "Show Asia / London / New York shading", g
 visualMode = input.string("Study", "Visual mode", options = ["Study", "Trading", "Minimal"], group = groupVisual)
 showLiquidityLines = input.bool(true, "Show liquidity labels with dashed lines", group = groupVisual)
 liquidityLineBars = input.int(10, "Liquidity-line length (bars)", minval = 3, maxval = 50, group = groupVisual)
+chartLabelMode = input.string(
+     "Short",
+     "Chart Label Mode",
+     options = ["Full", "Short", "Minimal"],
+     group = groupVisual
+)
 showSmartTradePanel = input.bool(true, "Show smart trade planner in dashboard", group = groupVisual)
 asiaSession = input.session("1900-0200", "Asia session", group = groupTime)
 londonSession = input.session("0200-0500", "London session", group = groupTime)
@@ -226,6 +232,31 @@ chochBearColor = color.orange
 asiaShade = color.new(color.rgb(176, 132, 32), 91)
 londonShade = color.new(color.rgb(35, 95, 180), 91)
 newYorkShade = color.new(color.rgb(130, 70, 170), 91)
+
+//=============================================================================
+// 2A. CHART READABILITY LABEL TEXT — PR1
+// Centralized label text for Full / Short / Minimal chart display modes.
+// PR1 only defines the label modes. Later PRs will wire these into labels.
+//=============================================================================
+labelModeFull = chartLabelMode == "Full"
+labelModeShort = chartLabelMode == "Short"
+labelModeMinimal = chartLabelMode == "Minimal"
+
+labelBSLTaken = labelModeFull ? "BSL  Taken ✓" : labelModeShort ? "BSL ✓" : "BSL"
+labelSSLTaken = labelModeFull ? "SSL  Taken ✓" : labelModeShort ? "SSL ✓" : "SSL"
+labelEQHTaken = labelModeFull ? "EQH  Taken ✓" : labelModeShort ? "EQH ✓" : "EQH"
+labelEQLTaken = labelModeFull ? "EQL  Taken ✓" : labelModeShort ? "EQL ✓" : "EQL"
+
+labelEQHUntouched = labelModeFull ? "EQH  Untouched" : labelModeShort ? "EQH" : "EQH"
+labelEQLUntouched = labelModeFull ? "EQL  Untouched" : labelModeShort ? "EQL" : "EQL"
+
+labelBullBOS = labelModeFull ? "Bullish BOS" : labelModeShort ? "BOS ↑" : "BOS"
+labelBearBOS = labelModeFull ? "Bearish BOS" : labelModeShort ? "BOS ↓" : "BOS"
+labelBullCHoCH = labelModeFull ? "Bullish CHoCH" : labelModeShort ? "CH ↑" : "CH"
+labelBearCHoCH = labelModeFull ? "Bearish CHoCH" : labelModeShort ? "CH ↓" : "CH"
+
+labelRetest = labelModeFull ? "RT" : labelModeShort ? "RT" : "R"
+labelConfirmation = labelModeFull ? "CONF" : labelModeShort ? "CNF" : "C"
 
 //=============================================================================
 // 3. CURRENT-TIMEFRAME EMA CONTEXT
@@ -1468,7 +1499,7 @@ if barstate.islast
 
         if isMorningBrief
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 EXEC PR5", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 READ PR1", text_color = color.white, bgcolor = panelColor, text_size = size.small)
             table.cell(dash, 0, 1, "MORNING BRIEF", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 1, "", bgcolor = color.new(color.black, 0))
 
@@ -1501,7 +1532,7 @@ if barstate.islast
 
         else if isExecutionFocus
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 EXEC PR5", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 READ PR1", text_color = color.white, bgcolor = panelColor, text_size = size.small)
             table.cell(dash, 0, 1, "EXECUTION FOCUS", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 1, lastDecision, text_color = decisionColor, bgcolor = color.new(color.black, 0), text_size = size.large)
 
@@ -1540,7 +1571,7 @@ if barstate.islast
 
         else if isTradeManagement
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 EXEC PR5", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 READ PR1", text_color = color.white, bgcolor = panelColor, text_size = size.small)
             table.cell(dash, 0, 1, "TRADE MANAGEMENT", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 1, lastPlanDirection, text_color = lastPlanDirection == "LONG" ? bullColor : lastPlanDirection == "SHORT" ? bearColor : neutralColor, bgcolor = color.new(color.black, 0), text_size = size.large)
 
@@ -1567,7 +1598,7 @@ if barstate.islast
 
         else if isFull
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 EXEC PR5", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 READ PR1", text_color = color.white, bgcolor = panelColor, text_size = size.small)
 
             table.cell(dash, 0, 1, "FULL DASHBOARD", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 1, "", bgcolor = color.new(color.black, 0))
