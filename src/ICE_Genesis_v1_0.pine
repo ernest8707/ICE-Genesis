@@ -1,6 +1,6 @@
 //@version=6
 indicator(
-     "ICE Genesis v1.0 - Execution Engine PR4",
+     "ICE Genesis v1.0 - Execution Engine PR5",
 shorttitle = "ICEGen",     overlay = true,
      max_labels_count = 250,
      max_lines_count = 200,
@@ -117,6 +117,12 @@ showExecutionDebug = input.bool(
 showExecutionRetestMarkers = input.bool(
      true,
      "Show retest markers",
+     group = groupExecution
+)
+
+showExecutionConfirmationMarkers = input.bool(
+     true,
+     "Show confirmation markers",
      group = groupExecution
 )
 
@@ -1210,8 +1216,8 @@ marketBriefingText = decisionLongReady ? "BUY active. Manage plan. Avoid shorts.
      "No clean story. Wait."
 
 //=============================================================================
-// 13B. EXECUTION ENGINE — PR4
-// Tracks retests, confirmation candles, entry permission, and retest markers without changing BUY / SELL logic.
+// 13B. EXECUTION ENGINE — PR5
+// Tracks retests, confirmation candles, entry permission, retest markers, and confirmation markers without changing BUY / SELL logic.
 //=============================================================================
 executionZoneOverlap(float zoneTop, float zoneBottom) =>
     not na(zoneTop) and not na(zoneBottom) and high >= zoneBottom and low <= zoneTop
@@ -1270,6 +1276,9 @@ bearExecutionRejection = close < open and (high - math.max(open, close)) / execu
 bullConfirmationNow = decisionDirection == 1 and (recentBullOBRetest or recentBullFVGRetest) and bullExecutionRejection
 bearConfirmationNow = decisionDirection == -1 and (recentBearOBRetest or recentBearFVGRetest) and bearExecutionRejection
 
+executionBullConfirmationSignal = bullConfirmationNow and not (bullConfirmationNow[1] == true)
+executionBearConfirmationSignal = bearConfirmationNow and not (bearConfirmationNow[1] == true)
+
 var int lastBullConfirmationBar = na
 var int lastBearConfirmationBar = na
 
@@ -1307,6 +1316,9 @@ plot(showExecutionDebug ? (executionEntryPermissionText == "Long Trigger" ? 2 : 
 
 plotshape(showExecutionRetestMarkers and visualMode != "Minimal" and executionBullRetestSignal, "Bullish execution retest marker", shape.circle, location.belowbar, bullColor, size = size.tiny, text = "RT")
 plotshape(showExecutionRetestMarkers and visualMode != "Minimal" and executionBearRetestSignal, "Bearish execution retest marker", shape.circle, location.abovebar, bearColor, size = size.tiny, text = "RT")
+
+plotshape(showExecutionConfirmationMarkers and visualMode != "Minimal" and executionBullConfirmationSignal, "Bullish execution confirmation marker", shape.labelup, location.belowbar, bullColor, size = size.tiny, text = "CONF", textcolor = color.white)
+plotshape(showExecutionConfirmationMarkers and visualMode != "Minimal" and executionBearConfirmationSignal, "Bearish execution confirmation marker", shape.labeldown, location.abovebar, bearColor, size = size.tiny, text = "CONF", textcolor = color.white)
 
 //=============================================================================
 // 13. TRADE PLAN
@@ -1456,7 +1468,7 @@ if barstate.islast
 
         if isMorningBrief
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 EXEC PR4", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 EXEC PR5", text_color = color.white, bgcolor = panelColor, text_size = size.small)
             table.cell(dash, 0, 1, "MORNING BRIEF", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 1, "", bgcolor = color.new(color.black, 0))
 
@@ -1489,7 +1501,7 @@ if barstate.islast
 
         else if isExecutionFocus
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 EXEC PR4", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 EXEC PR5", text_color = color.white, bgcolor = panelColor, text_size = size.small)
             table.cell(dash, 0, 1, "EXECUTION FOCUS", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 1, lastDecision, text_color = decisionColor, bgcolor = color.new(color.black, 0), text_size = size.large)
 
@@ -1528,7 +1540,7 @@ if barstate.islast
 
         else if isTradeManagement
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 EXEC PR4", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 EXEC PR5", text_color = color.white, bgcolor = panelColor, text_size = size.small)
             table.cell(dash, 0, 1, "TRADE MANAGEMENT", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 1, lastPlanDirection, text_color = lastPlanDirection == "LONG" ? bullColor : lastPlanDirection == "SHORT" ? bearColor : neutralColor, bgcolor = color.new(color.black, 0), text_size = size.large)
 
@@ -1555,7 +1567,7 @@ if barstate.islast
 
         else if isFull
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 EXEC PR4", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 EXEC PR5", text_color = color.white, bgcolor = panelColor, text_size = size.small)
 
             table.cell(dash, 0, 1, "FULL DASHBOARD", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 1, "", bgcolor = color.new(color.black, 0))
