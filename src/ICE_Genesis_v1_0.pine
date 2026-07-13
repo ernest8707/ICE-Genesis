@@ -1,6 +1,6 @@
 //@version=6
 indicator(
-     "ICE Genesis v1.0 - Institutional Bias PR2",
+     "ICE Genesis v1.0 - Market Narrative PR2",
 shorttitle = "ICEGen",     overlay = true,
      max_labels_count = 250,
      max_lines_count = 200,
@@ -1101,13 +1101,24 @@ decisionStory = decisionConflict ? decisionMissing :
      decisionDirection == -1 ? "Bearish evidence is developing" : "No directional setup owns the market"
 
 //=============================================================================
-// 13A. MARKET NARRATIVE ENGINE — PR1
-// Converts existing engine states into a plain-language market story.
-// PR1 does not change BUY / SELL logic.
+// 13A. MARKET NARRATIVE ENGINE — PR2
+// Converts existing engine states into a prioritized institutional story.
+// PR2 refines narrative priority without changing BUY / SELL logic.
 //=============================================================================
 narrativeTrending = math.abs(ema20 - ema50) > atr * 0.25
 
-marketDirectionText = bullBias ? "Bullish" :
+narrativeBullLiquidityRaid = bullLiquidityState and decisionDirection == 1
+narrativeBearLiquidityRaid = bearLiquidityState and decisionDirection == -1
+
+narrativeBullRetracement = decisionDirection == 1 and obActive and activeBullish
+narrativeBearRetracement = decisionDirection == -1 and obActive and not activeBullish
+
+narrativeBullExpansion = decisionDirection == 1 and (bullDisplacementState or bullStructureState)
+narrativeBearExpansion = decisionDirection == -1 and (bearDisplacementState or bearStructureState)
+
+marketDirectionText = decisionLongReady ? "Bullish" :
+     decisionShortReady ? "Bearish" :
+     bullBias ? "Bullish" :
      bearBias ? "Bearish" :
      decisionDirection == 1 ? "Bullish Lean" :
      decisionDirection == -1 ? "Bearish Lean" : "Mixed"
@@ -1117,25 +1128,38 @@ marketDirectionColor = str.contains(marketDirectionText, "Bullish") ? bullColor 
 
 marketPhaseText = decisionLongReady or decisionShortReady ? "Execution Ready" :
      decisionConflict ? "Conflict" :
-     bullLiquidityState or bearLiquidityState ? "Liquidity Event" :
-     bullDisplacementState or bearDisplacementState ? "Expansion" :
-     obActive ? "Pullback" :
+     narrativeBullLiquidityRaid or narrativeBearLiquidityRaid ? "Liquidity Raid" :
+     narrativeBullRetracement or narrativeBearRetracement ? "Retracement" :
+     narrativeBullExpansion or narrativeBearExpansion ? "Expansion" :
      narrativeTrending ? "Trending" : "Consolidation"
 
-institutionalNarrativeText = bullBias and obActive and activeBullish ? "Bullish Retracement" :
-     bearBias and obActive and not activeBullish ? "Bearish Retracement" :
-     bullBias and (bullStructureState or bullDisplacementState) ? "Bullish Expansion" :
-     bearBias and (bearStructureState or bearDisplacementState) ? "Bearish Expansion" :
+institutionalNarrativeText = decisionLongReady ? "Bullish Execution Setup" :
+     decisionShortReady ? "Bearish Execution Setup" :
+     decisionConflict ? "Conflict / Stand Down" :
+     narrativeBullLiquidityRaid ? "Sell-Side Liquidity Raid" :
+     narrativeBearLiquidityRaid ? "Buy-Side Liquidity Raid" :
+     narrativeBullRetracement ? "Retracement into Demand" :
+     narrativeBearRetracement ? "Retracement into Supply" :
+     narrativeBullExpansion ? "Bullish Expansion" :
+     narrativeBearExpansion ? "Bearish Expansion" :
      not bullBias and not bearBias and narrativeTrending ? "Repricing" :
      not narrativeTrending ? "Consolidation" : "Transition"
 
-currentObjectiveText = decisionDirection == 1 and not bullLiquidityState ? "Seek Sell-Side Liquidity" :
+currentObjectiveText = decisionLongReady or decisionShortReady ? "Execute Trade Plan" :
+     decisionConflict ? "Stand Down" :
+     decisionDirection == 1 and not bullLiquidityState ? "Seek Sell-Side Liquidity" :
      decisionDirection == -1 and not bearLiquidityState ? "Seek Buy-Side Liquidity" :
+     decisionDirection == 1 and not bullDisplacementState ? "Create Bullish Displacement" :
+     decisionDirection == -1 and not bearDisplacementState ? "Create Bearish Displacement" :
+     decisionDirection == 1 and not bullStructureState ? "Confirm Bullish Structure" :
+     decisionDirection == -1 and not bearStructureState ? "Confirm Bearish Structure" :
      decisionDirection == 1 and not bullOBState ? "Return to Bullish Order Block" :
      decisionDirection == -1 and not bearOBState ? "Return to Bearish Order Block" :
      decisionDirection == 1 and requireFVGForSetup and not bullFVGState ? "Fill Bullish FVG" :
      decisionDirection == -1 and requireFVGForSetup and not bearFVGState ? "Fill Bearish FVG" :
-     decisionLongReady or decisionShortReady ? "Execute Trade Plan" : "Wait for Directional Clarity"
+     decisionDirection == 1 and requireOTEForDecision and not bullOTEState ? "Reach Bullish OTE" :
+     decisionDirection == -1 and requireOTEForDecision and not bearOTEState ? "Reach Bearish OTE" :
+     "Wait for Directional Clarity"
 
 expectedNextEventText = decisionLongReady or decisionShortReady ? "Manage Trade Plan" :
      decisionConflict ? "Evidence Reset" :
@@ -1289,7 +1313,7 @@ if barstate.islast
 
         if isFull
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 NARR PR1", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 NARR PR2", text_color = color.white, bgcolor = panelColor, text_size = size.small)
             table.cell(dash, 0, 1, "INSTITUTIONAL EDGE", text_color = neutralColor, bgcolor = panelColor, text_size = size.tiny)
             table.cell(dash, 1, 1, "", bgcolor = panelColor)
 
