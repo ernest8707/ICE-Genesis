@@ -1,6 +1,6 @@
 //@version=6
 indicator(
-     "ICE Genesis v1.0 - Market Narrative PR2",
+     "ICE Genesis v1.0 - Market Narrative PR3",
 shorttitle = "ICEGen",     overlay = true,
      max_labels_count = 250,
      max_lines_count = 200,
@@ -1101,7 +1101,7 @@ decisionStory = decisionConflict ? decisionMissing :
      decisionDirection == -1 ? "Bearish evidence is developing" : "No directional setup owns the market"
 
 //=============================================================================
-// 13A. MARKET NARRATIVE ENGINE — PR2
+// 13A. MARKET NARRATIVE ENGINE — PR3
 // Converts existing engine states into a prioritized institutional story.
 // PR2 refines narrative priority without changing BUY / SELL logic.
 //=============================================================================
@@ -1171,7 +1171,22 @@ expectedNextEventText = decisionLongReady or decisionShortReady ? "Manage Trade 
      decisionStage == "OTE" ? "OTE Retracement" :
      decisionStage == "ENTRY" ? "Entry Confirmation" : "Stronger Confirmation"
 
-marketBriefingText = marketDirectionText + " / " + institutionalNarrativeText + " / " + currentObjectiveText
+marketBriefingText = decisionLongReady ? "Bullish setup active. Manage plan; avoid shorts." :
+     decisionShortReady ? "Bearish setup active. Manage plan; avoid longs." :
+     decisionConflict ? "Conflict detected. Stand down until evidence agrees." :
+     decisionDirection == 1 and not bullLiquidityState ? "Bullish lean. Wait for SSL sweep." :
+     decisionDirection == -1 and not bearLiquidityState ? "Bearish lean. Wait for BSL sweep." :
+     decisionDirection == 1 and not bullDisplacementState ? "Bullish setup building. Wait for displacement." :
+     decisionDirection == -1 and not bearDisplacementState ? "Bearish setup building. Wait for displacement." :
+     decisionDirection == 1 and not bullStructureState ? "Bullish setup building. Wait for BOS / CHoCH." :
+     decisionDirection == -1 and not bearStructureState ? "Bearish setup building. Wait for BOS / CHoCH." :
+     decisionDirection == 1 and not bullOBState ? "Bullish setup building. Wait for OB retest." :
+     decisionDirection == -1 and not bearOBState ? "Bearish setup building. Wait for OB retest." :
+     decisionDirection == 1 and requireFVGForSetup and not bullFVGState ? "Bullish setup building. Wait for FVG confirmation." :
+     decisionDirection == -1 and requireFVGForSetup and not bearFVGState ? "Bearish setup building. Wait for FVG confirmation." :
+     decisionDirection == 1 and requireOTEForDecision and not bullOTEState ? "Bullish setup building. Wait for OTE." :
+     decisionDirection == -1 and requireOTEForDecision and not bearOTEState ? "Bearish setup building. Wait for OTE." :
+     "No clean story yet. Wait for stronger confirmation."
 
 //=============================================================================
 // 13. TRADE PLAN
@@ -1313,7 +1328,7 @@ if barstate.islast
 
         if isFull
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 NARR PR2", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 NARR PR3", text_color = color.white, bgcolor = panelColor, text_size = size.small)
             table.cell(dash, 0, 1, "INSTITUTIONAL EDGE", text_color = neutralColor, bgcolor = panelColor, text_size = size.tiny)
             table.cell(dash, 1, 1, "", bgcolor = panelColor)
 
@@ -1325,8 +1340,8 @@ if barstate.islast
             table.cell(dash, 1, 4, institutionalNarrativeText, text_color = marketDirectionColor, bgcolor = panelColor)
             table.cell(dash, 0, 5, "Market Phase", text_color = neutralColor, bgcolor = panelColor)
             table.cell(dash, 1, 5, marketPhaseText, text_color = marketPhaseText == "Conflict" ? bearColor : neutralColor, bgcolor = panelColor)
-            table.cell(dash, 0, 6, "Objective / Next", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 6, currentObjectiveText + " → " + expectedNextEventText, text_color = neutralColor, bgcolor = panelColor, text_size = size.tiny)
+            table.cell(dash, 0, 6, "Briefing", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 6, marketBriefingText, text_color = marketDirectionColor, bgcolor = panelColor, text_size = size.tiny)
 
             table.cell(dash, 0, 7, "SETUP CHECKLIST", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 7, "", bgcolor = color.new(color.black, 0))
