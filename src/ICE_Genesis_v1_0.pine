@@ -1,6 +1,6 @@
 //@version=6
 indicator(
-     "ICE Genesis v1.0 - Chart Readability PR6",
+     "ICE Genesis v1.0 - Chart Readability PR7",
 shorttitle = "ICEGen",     overlay = true,
      max_labels_count = 250,
      max_lines_count = 200,
@@ -272,9 +272,9 @@ londonShade = color.new(color.rgb(35, 95, 180), 91)
 newYorkShade = color.new(color.rgb(130, 70, 170), 91)
 
 //=============================================================================
-// 2A. CHART READABILITY LABEL TEXT — PR6
+// 2A. CHART READABILITY LABEL TEXT — PR7
 // Centralized label text for Full / Short / Minimal chart display modes.
-// PR6 keeps liquidity / OB labels clean and adds clean FVG + execution marker rendering controls.
+// PR7 keeps liquidity / OB / FVG labels clean and wires structure labels into Chart Label Mode.
 //=============================================================================
 labelModeFull = chartLabelMode == "Full"
 labelModeShort = chartLabelMode == "Short"
@@ -885,21 +885,21 @@ addStructureMark(string txt, int swingBar, float level, color markColor, bool ex
             label.delete(array.shift(structureLabels))
 
 if showInternalEvents and internalBullCHoCH
-    addStructureMark("CHoCH", lastIntHighBar, lastIntHigh, chochBullColor, false)
+    addStructureMark(labelBullCHoCH, lastIntHighBar, lastIntHigh, chochBullColor, false)
 if showInternalEvents and internalBearCHoCH
-    addStructureMark("CHoCH", lastIntLowBar, lastIntLow, chochBearColor, false)
+    addStructureMark(labelBearCHoCH, lastIntLowBar, lastIntLow, chochBearColor, false)
 if showInternalEvents and internalBullBOS
-    addStructureMark("BOS", lastIntHighBar, lastIntHigh, bullColor, false)
+    addStructureMark(labelBullBOS, lastIntHighBar, lastIntHigh, bullColor, false)
 if showInternalEvents and internalBearBOS
-    addStructureMark("BOS", lastIntLowBar, lastIntLow, bearColor, false)
+    addStructureMark(labelBearBOS, lastIntLowBar, lastIntLow, bearColor, false)
 if showExternalEvents and externalBullCHoCH
-    addStructureMark("CHoCH", lastExtHighBar, lastExtHigh, chochBullColor, true)
+    addStructureMark(labelBullCHoCH, lastExtHighBar, lastExtHigh, chochBullColor, true)
 if showExternalEvents and externalBearCHoCH
-    addStructureMark("CHoCH", lastExtLowBar, lastExtLow, chochBearColor, true)
+    addStructureMark(labelBearCHoCH, lastExtLowBar, lastExtLow, chochBearColor, true)
 if showExternalEvents and externalBullBOS
-    addStructureMark("BOS", lastExtHighBar, lastExtHigh, bullColor, true)
+    addStructureMark(labelBullBOS, lastExtHighBar, lastExtHigh, bullColor, true)
 if showExternalEvents and externalBearBOS
-    addStructureMark("BOS", lastExtLowBar, lastExtLow, bearColor, true)
+    addStructureMark(labelBearBOS, lastExtLowBar, lastExtLow, bearColor, true)
 
 //=============================================================================
 // 12. HIGHLIGHTED ORDER-BLOCK / FVG ZONES
@@ -1596,7 +1596,7 @@ if barstate.islast
 
         if isMorningBrief
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 READ PR6", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 READ PR7", text_color = color.white, bgcolor = panelColor, text_size = size.small)
             table.cell(dash, 0, 1, "MORNING BRIEF", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 1, "", bgcolor = color.new(color.black, 0))
 
@@ -1629,7 +1629,7 @@ if barstate.islast
 
         else if isExecutionFocus
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 READ PR6", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 READ PR7", text_color = color.white, bgcolor = panelColor, text_size = size.small)
             table.cell(dash, 0, 1, "EXECUTION FOCUS", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 1, lastDecision, text_color = decisionColor, bgcolor = color.new(color.black, 0), text_size = size.large)
 
@@ -1668,7 +1668,7 @@ if barstate.islast
 
         else if isTradeManagement
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 READ PR6", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 READ PR7", text_color = color.white, bgcolor = panelColor, text_size = size.small)
             table.cell(dash, 0, 1, "TRADE MANAGEMENT", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 1, lastPlanDirection, text_color = lastPlanDirection == "LONG" ? bullColor : lastPlanDirection == "SHORT" ? bearColor : neutralColor, bgcolor = color.new(color.black, 0), text_size = size.large)
 
@@ -1695,7 +1695,7 @@ if barstate.islast
 
         else if isFull
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 READ PR6", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 READ PR7", text_color = color.white, bgcolor = panelColor, text_size = size.small)
 
             table.cell(dash, 0, 1, "FULL DASHBOARD", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 1, "", bgcolor = color.new(color.black, 0))
