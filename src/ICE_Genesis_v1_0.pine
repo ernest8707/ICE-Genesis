@@ -1,6 +1,6 @@
 //@version=6
 indicator(
-     "ICE Genesis v1.0 - Execution Engine PR1",
+     "ICE Genesis v1.0 - Execution Engine PR2",
 shorttitle = "ICEGen",     overlay = true,
      max_labels_count = 250,
      max_lines_count = 200,
@@ -1204,8 +1204,8 @@ marketBriefingText = decisionLongReady ? "BUY active. Manage plan. Avoid shorts.
      "No clean story. Wait."
 
 //=============================================================================
-// 13B. EXECUTION ENGINE — PR1
-// Tracks OB/FVG retests without changing BUY / SELL logic.
+// 13B. EXECUTION ENGINE — PR2
+// Tracks OB/FVG retests and confirmation candles without changing BUY / SELL logic.
 //=============================================================================
 executionZoneOverlap(float zoneTop, float zoneBottom) =>
     not na(zoneTop) and not na(zoneBottom) and high >= zoneBottom and low <= zoneTop
@@ -1250,20 +1250,50 @@ executionRetestText = executionDirectionalOBRetest and executionDirectionalFVGRe
      executionDirectionalOBRetest ? "OB Retest" :
      executionDirectionalFVGRetest ? "FVG Retest" : "No Retest"
 
+// Confirmation candle logic.
+// Bullish confirmation requires a bullish candle after/inside a bullish retest zone.
+// Bearish confirmation requires a bearish candle after/inside a bearish retest zone.
+executionCandleRange = math.max(high - low, syminfo.mintick)
+
+bullExecutionRejection = close > open and (math.min(open, close) - low) / executionCandleRange >= 0.30
+bearExecutionRejection = close < open and (high - math.max(open, close)) / executionCandleRange >= 0.30
+
+bullConfirmationNow = decisionDirection == 1 and (recentBullOBRetest or recentBullFVGRetest) and bullExecutionRejection
+bearConfirmationNow = decisionDirection == -1 and (recentBearOBRetest or recentBearFVGRetest) and bearExecutionRejection
+
+var int lastBullConfirmationBar = na
+var int lastBearConfirmationBar = na
+
+if bullConfirmationNow
+    lastBullConfirmationBar := bar_index
+
+if bearConfirmationNow
+    lastBearConfirmationBar := bar_index
+
+recentBullConfirmation = not na(lastBullConfirmationBar) and bar_index - lastBullConfirmationBar <= executionRetestMemoryBars
+recentBearConfirmation = not na(lastBearConfirmationBar) and bar_index - lastBearConfirmationBar <= executionRetestMemoryBars
+
+executionDirectionalConfirmation = decisionDirection == 1 ? recentBullConfirmation :
+     decisionDirection == -1 ? recentBearConfirmation :
+     recentBullConfirmation or recentBearConfirmation
+
+executionConfirmationText = recentBullConfirmation ? "Bullish Confirmation" :
+     recentBearConfirmation ? "Bearish Confirmation" : "Waiting"
+
 executionStatusText = decisionLongReady or decisionShortReady ? "Triggered" :
      decisionConflict ? "Stand Down" :
+     executionDirectionalConfirmation ? "Confirmation" :
      executionDirectionalOBRetest or executionDirectionalFVGRetest ? "Retesting" :
      decisionDirection == 1 or decisionDirection == -1 ? "Preparing" : "Not Ready"
 
-executionConfirmationText = decisionLongReady ? "Bullish Confirmation" :
-     decisionShortReady ? "Bearish Confirmation" : "Waiting"
-
 executionEntryPermissionText = decisionLongReady ? "Long Trigger" :
-     decisionShortReady ? "Short Trigger" : "Wait"
+     decisionShortReady ? "Short Trigger" :
+     executionDirectionalConfirmation ? "Confirmation Ready" : "Wait"
 
 plot(showExecutionDebug ? (executionDirectionalOBRetest ? 1 : 0) : na, "Execution OB Retest", display = display.data_window)
 plot(showExecutionDebug ? (executionDirectionalFVGRetest ? 1 : 0) : na, "Execution FVG Retest", display = display.data_window)
-plot(showExecutionDebug ? (executionStatusText == "Triggered" ? 3 : executionStatusText == "Retesting" ? 2 : executionStatusText == "Preparing" ? 1 : 0) : na, "Execution Status Value", display = display.data_window)
+plot(showExecutionDebug ? (executionDirectionalConfirmation ? 1 : 0) : na, "Execution Confirmation", display = display.data_window)
+plot(showExecutionDebug ? (executionStatusText == "Triggered" ? 4 : executionStatusText == "Confirmation" ? 3 : executionStatusText == "Retesting" ? 2 : executionStatusText == "Preparing" ? 1 : 0) : na, "Execution Status Value", display = display.data_window)
 
 //=============================================================================
 // 13. TRADE PLAN
@@ -1412,7 +1442,7 @@ if barstate.islast
 
                if isMorningBrief
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 EXEC PR1", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 EXEC PR2", text_color = color.white, bgcolor = panelColor, text_size = size.small)
             table.cell(dash, 0, 1, "MORNING BRIEF", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 1, "", bgcolor = color.new(color.black, 0))
 
@@ -1465,7 +1495,7 @@ if barstate.islast
             table.cell(dash, 1, 6, executionRetestText, text_color = executionRetestText == "No Retest" ? neutralColor : marketDirectionColor, bgcolor = panelColor)
 
             table.cell(dash, 0, 7, "Execution", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 7, executionStatusText, text_color = executionStatusText == "Triggered" ? bullColor : executionStatusText == "Stand Down" ? bearColor : neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 7, executionStatusText + " / " + executionConfirmationText, text_color = executionStatusText == "Triggered" ? bullColor : executionStatusText == "Stand Down" ? bearColor : neutralColor, bgcolor = panelColor)
 
             table.cell(dash, 0, 8, "OTE / HTF", text_color = neutralColor, bgcolor = panelColor)
             table.cell(dash, 1, 8, (dashboardOTE ? "OTE OK" : "OTE ...") + " / " + biasText, text_color = dashboardOTE ? bullColor : neutralColor, bgcolor = panelColor, text_size = size.tiny)
