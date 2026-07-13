@@ -1,6 +1,6 @@
 //@version=6
 indicator(
-     "ICE Genesis v1.0 - Decision Engine PR2",
+     "ICE Genesis v1.0 - Institutional Bias PR2",
 shorttitle = "ICEGen",     overlay = true,
      max_labels_count = 250,
      max_lines_count = 200,
@@ -92,6 +92,13 @@ countertrendScorePenalty = input.int(
      step = 5,
      group = groupInstitutionalBias
 )
+
+showBiasDebug = input.bool(
+    false,
+    "Show Bias Debug Values",
+    group = groupInstitutionalBias
+)
+
 minimumScore    = input.int(75, "Minimum setup score", minval = 0, maxval = 100, step = 5, group = groupCore)
 minimumScoreSeparation = input.int(15, "Minimum bull / bear score separation", minval = 0, maxval = 50, step = 5, group = groupCore)
 requireOTEForDecision = input.bool(false, "Require OTE for BUY / SELL", group = groupCore)
@@ -203,6 +210,39 @@ ema200 = ta.ema(close, 200)
 plot(showEMAs ? ema20 : na, "EMA 20", color = color.green, linewidth = 1)
 plot(showEMAs ? ema50 : na, "EMA 50", color = color.orange, linewidth = 1)
 plot(showEMAs ? ema200 : na, "EMA 200", color = color.purple, linewidth = 2)
+
+//=============================================================================
+// 3A. INSTITUTIONAL BIAS ENGINE — CONFIRMED TIMEFRAME DATA
+// Uses only completed candles to prevent higher-timeframe repainting.
+//=============================================================================
+anchorClose = request.security(
+     syminfo.tickerid,
+     anchorBiasTimeframe,
+     close[1],
+     barmerge.gaps_off,
+     barmerge.lookahead_on
+)
+
+trendClose = request.security(
+     syminfo.tickerid,
+     trendBiasTimeframe,
+     close[1],
+     barmerge.gaps_off,
+     barmerge.lookahead_on
+)
+
+executionClose = request.security(
+     syminfo.tickerid,
+     executionBiasTimeframe,
+     close[1],
+     barmerge.gaps_off,
+     barmerge.lookahead_on
+)
+
+// Temporary verification values. These appear only in TradingView's Data Window.
+plot(showBiasDebug ? anchorClose : na, "Anchor Bias Confirmed Close", display = display.data_window)
+plot(showBiasDebug ? trendClose : na, "Trend Bias Confirmed Close", display = display.data_window)
+plot(showBiasDebug ? executionClose : na, "Execution Bias Confirmed Close", display = display.data_window)
 
 //=============================================================================
 // 4. HIGHER-TIMEFRAME BIAS
