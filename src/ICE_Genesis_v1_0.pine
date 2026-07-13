@@ -1101,6 +1101,55 @@ decisionStory = decisionConflict ? decisionMissing :
      decisionDirection == -1 ? "Bearish evidence is developing" : "No directional setup owns the market"
 
 //=============================================================================
+// 13A. MARKET NARRATIVE ENGINE — PR1
+// Converts existing engine states into a plain-language market story.
+// PR1 does not change BUY / SELL logic.
+//=============================================================================
+narrativeTrending = math.abs(ema20 - ema50) > atr * 0.25
+
+marketDirectionText = bullBias ? "Bullish" :
+     bearBias ? "Bearish" :
+     decisionDirection == 1 ? "Bullish Lean" :
+     decisionDirection == -1 ? "Bearish Lean" : "Mixed"
+
+marketDirectionColor = str.contains(marketDirectionText, "Bullish") ? bullColor :
+     str.contains(marketDirectionText, "Bearish") ? bearColor : neutralColor
+
+marketPhaseText = decisionLongReady or decisionShortReady ? "Execution Ready" :
+     decisionConflict ? "Conflict" :
+     bullLiquidityState or bearLiquidityState ? "Liquidity Event" :
+     bullDisplacementState or bearDisplacementState ? "Expansion" :
+     obActive ? "Pullback" :
+     narrativeTrending ? "Trending" : "Consolidation"
+
+institutionalNarrativeText = bullBias and obActive and activeBullish ? "Bullish Retracement" :
+     bearBias and obActive and not activeBullish ? "Bearish Retracement" :
+     bullBias and (bullStructureState or bullDisplacementState) ? "Bullish Expansion" :
+     bearBias and (bearStructureState or bearDisplacementState) ? "Bearish Expansion" :
+     not bullBias and not bearBias and narrativeTrending ? "Repricing" :
+     not narrativeTrending ? "Consolidation" : "Transition"
+
+currentObjectiveText = decisionDirection == 1 and not bullLiquidityState ? "Seek Sell-Side Liquidity" :
+     decisionDirection == -1 and not bearLiquidityState ? "Seek Buy-Side Liquidity" :
+     decisionDirection == 1 and not bullOBState ? "Return to Bullish Order Block" :
+     decisionDirection == -1 and not bearOBState ? "Return to Bearish Order Block" :
+     decisionDirection == 1 and requireFVGForSetup and not bullFVGState ? "Fill Bullish FVG" :
+     decisionDirection == -1 and requireFVGForSetup and not bearFVGState ? "Fill Bearish FVG" :
+     decisionLongReady or decisionShortReady ? "Execute Trade Plan" : "Wait for Directional Clarity"
+
+expectedNextEventText = decisionLongReady or decisionShortReady ? "Manage Trade Plan" :
+     decisionConflict ? "Evidence Reset" :
+     decisionStage == "LIQUIDITY" ? (decisionDirection == 1 ? "Sweep SSL" : decisionDirection == -1 ? "Sweep BSL" : "Liquidity Sweep") :
+     decisionStage == "DISPLACEMENT" ? (decisionDirection == 1 ? "Bullish Displacement" : "Bearish Displacement") :
+     decisionStage == "STRUCTURE" ? (decisionDirection == 1 ? "Bullish BOS / CHoCH" : "Bearish BOS / CHoCH") :
+     decisionStage == "ORDER BLOCK" ? (decisionDirection == 1 ? "Bullish OB Retest" : "Bearish OB Retest") :
+     decisionStage == "FVG" ? (decisionDirection == 1 ? "Bullish FVG" : "Bearish FVG") :
+     decisionStage == "OTE" ? "OTE Retracement" :
+     decisionStage == "ENTRY" ? "Entry Confirmation" : "Stronger Confirmation"
+
+marketBriefingText = marketDirectionText + " / " + institutionalNarrativeText + " / " + currentObjectiveText
+
+//=============================================================================
 // 13. TRADE PLAN
 //=============================================================================
 var line entryLine = na
