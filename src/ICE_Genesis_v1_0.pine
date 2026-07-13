@@ -1,6 +1,6 @@
 //@version=6
 indicator(
-     "ICE Genesis v1.0 - Market Narrative PR5",
+     "ICE Genesis v1.0 - Market Narrative PR6",
 shorttitle = "ICEGen",     overlay = true,
      max_labels_count = 250,
      max_lines_count = 200,
@@ -1101,8 +1101,8 @@ decisionStory = decisionConflict ? decisionMissing :
      decisionDirection == -1 ? "Bearish evidence is developing" : "No directional setup owns the market"
 
 //=============================================================================
-// 13A. MARKET NARRATIVE ENGINE — PR5
-// PR5 adds structured Objective and Next Event dashboard detail without changing BUY / SELL logic.
+// 13A. MARKET NARRATIVE ENGINE — PR6
+// PR6 cleans up dashboard layout without changing BUY / SELL logic.
 // PR5 improves dashboard briefing readability without changing BUY / SELL logic.
 //=============================================================================
 narrativeTrending = math.abs(ema20 - ema50) > atr * 0.25
@@ -1325,84 +1325,62 @@ if barstate.islast
         string compactFvgOTE = (fvgActive ? fvgText : "FVG …") + " / " + (dashboardOTE ? "OTE ✓" : "OTE …")
         string compactScore = str.tostring(lastScore) + "% / " + lastGrade
         color decisionColor = lastDecision == "BUY" ? bullColor : lastDecision == "SELL" ? bearColor : neutralColor
+        string dashboardHtfSession = biasText + " / " + activeSessionText
+        string dashboardPlanText = showSmartTradePanel and lastPlanDirection != "WAIT" ? lastPlanDirection : "No active plan"
+        string dashboardEntryStop = showSmartTradePanel and not na(lastPlanEntry) and not na(lastPlanStop) ? str.tostring(lastPlanEntry, format.mintick) + " / " + str.tostring(lastPlanStop, format.mintick) : "—"
+        string dashboardTargetRR = showSmartTradePanel and not na(lastPlanTarget) and not na(lastPlanRR) ? str.tostring(lastPlanTarget, format.mintick) + " / 1:" + str.tostring(lastPlanRR, "#.##") : "—"
 
         if isFull
-            table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 NARR PR5", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 0, 1, "INSTITUTIONAL EDGE", text_color = neutralColor, bgcolor = panelColor, text_size = size.tiny)
-            table.cell(dash, 1, 1, "", bgcolor = panelColor)
+    table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+    table.cell(dash, 1, 0, "v1.0 NARR PR6", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+    table.cell(dash, 0, 1, "INSTITUTIONAL EDGE", text_color = neutralColor, bgcolor = panelColor, text_size = size.tiny)
+    table.cell(dash, 1, 1, "", bgcolor = panelColor)
 
-            table.cell(dash, 0, 2, "MARKET CONTEXT", text_color = color.white, bgcolor = color.new(color.black, 0))
-            table.cell(dash, 1, 2, "", bgcolor = color.new(color.black, 0))
-            table.cell(dash, 0, 3, "Market Direction", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 3, marketDirectionText, text_color = marketDirectionColor, bgcolor = panelColor)
-            table.cell(dash, 0, 4, "Narrative", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 4, institutionalNarrativeText, text_color = marketDirectionColor, bgcolor = panelColor)
-            table.cell(dash, 0, 5, "Market Phase", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 5, marketPhaseText, text_color = marketPhaseText == "Conflict" ? bearColor : neutralColor, bgcolor = panelColor)
-            table.cell(dash, 0, 6, "Briefing", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 6, marketBriefingText, text_color = marketDirectionColor, bgcolor = panelColor, text_size = size.small)
+    table.cell(dash, 0, 2, "MARKET CONTEXT", text_color = color.white, bgcolor = color.new(color.black, 0))
+    table.cell(dash, 1, 2, "", bgcolor = color.new(color.black, 0))
+    table.cell(dash, 0, 3, "Direction", text_color = neutralColor, bgcolor = panelColor)
+    table.cell(dash, 1, 3, marketDirectionText, text_color = marketDirectionColor, bgcolor = panelColor)
+    table.cell(dash, 0, 4, "Narrative", text_color = neutralColor, bgcolor = panelColor)
+    table.cell(dash, 1, 4, institutionalNarrativeText, text_color = marketDirectionColor, bgcolor = panelColor)
+    table.cell(dash, 0, 5, "Phase", text_color = neutralColor, bgcolor = panelColor)
+    table.cell(dash, 1, 5, marketPhaseText, text_color = marketPhaseText == "Conflict" ? bearColor : neutralColor, bgcolor = panelColor)
+    table.cell(dash, 0, 6, "Briefing", text_color = neutralColor, bgcolor = panelColor)
+    table.cell(dash, 1, 6, marketBriefingText, text_color = marketDirectionColor, bgcolor = panelColor, text_size = size.small)
 
-            table.cell(dash, 0, 7, "SETUP CHECKLIST", text_color = color.white, bgcolor = color.new(color.black, 0))
-            table.cell(dash, 1, 7, "", bgcolor = color.new(color.black, 0))
-            bool directionBull = decisionDirection == 1
-            table.cell(dash, 0, 8, "1. Liquidity", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 8, check(directionBull ? recentSSLSweep : recentBSLSweep, directionBull ? "SSL Swept" : "BSL Swept", directionBull ? "Waiting for SSL" : "Waiting for BSL"), text_color = (recentSSLSweep or recentBSLSweep) ? bullColor : neutralColor, bgcolor = panelColor)
-            table.cell(dash, 0, 9, "2. Displacement", text_color = neutralColor, bgcolor = panelColor)
-            bool dashboardDisplacement = directionBull ? recentBullDisplacement : recentBearDisplacement
-            table.cell(dash, 1, 9, check(dashboardDisplacement, "Strong", directionBull ? "Waiting bullish" : "Waiting bearish"), text_color = dashboardDisplacement ? bullColor : neutralColor, bgcolor = panelColor)
-            table.cell(dash, 0, 10, "3. Structure", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 10, latestStructureEvent, text_color = str.contains(latestStructureEvent, "Bullish") ? bullColor : str.contains(latestStructureEvent, "Bearish") ? bearColor : neutralColor, bgcolor = panelColor)
-            table.cell(dash, 0, 11, "4. Order Block", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 11, check(obActive, zoneText, "Waiting"), text_color = obActive ? (activeBullish ? bullColor : bearColor) : neutralColor, bgcolor = panelColor)
-            table.cell(dash, 0, 12, "5. FVG", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 12, check(fvgActive, fvgText, "Waiting"), text_color = fvgActive ? (activeBullish ? bullColor : bearColor) : neutralColor, bgcolor = panelColor)
-            table.cell(dash, 0, 13, "6. OTE", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 13, check(extRangeValid and close <= ote618 and close >= ote79, "In OTE", "Outside"), text_color = extRangeValid and close <= ote618 and close >= ote79 ? bullColor : neutralColor, bgcolor = panelColor)
-            table.cell(dash, 0, 14, "7. HTF Alignment", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 14, check(bullBias or bearBias, biasText, "Mixed"), text_color = bullBias ? bullColor : bearBias ? bearColor : neutralColor, bgcolor = panelColor)
-            table.cell(dash, 0, 15, "8. Session", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 15, check(activeSessionText != "Inactive", activeSessionText, "Inactive"), text_color = activeSessionText != "Inactive" ? bullColor : neutralColor, bgcolor = panelColor)
+    table.cell(dash, 0, 7, "EXECUTION CHECKLIST", text_color = color.white, bgcolor = color.new(color.black, 0))
+    table.cell(dash, 1, 7, "", bgcolor = color.new(color.black, 0))
+    table.cell(dash, 0, 8, "Liquidity", text_color = neutralColor, bgcolor = panelColor)
+    table.cell(dash, 1, 8, check(directionBull ? recentSSLSweep : recentBSLSweep, directionBull ? "SSL Swept" : "BSL Swept", directionBull ? "Need SSL" : "Need BSL"), text_color = (recentSSLSweep or recentBSLSweep) ? bullColor : neutralColor, bgcolor = panelColor)
+    table.cell(dash, 0, 9, "Displacement", text_color = neutralColor, bgcolor = panelColor)
+    table.cell(dash, 1, 9, check(dashboardDisplacement, "Strong", directionBull ? "Need Bull Disp" : "Need Bear Disp"), text_color = dashboardDisplacement ? bullColor : neutralColor, bgcolor = panelColor)
+    table.cell(dash, 0, 10, "Structure", text_color = neutralColor, bgcolor = panelColor)
+    table.cell(dash, 1, 10, latestStructureEvent, text_color = str.contains(latestStructureEvent, "Bullish") ? bullColor : str.contains(latestStructureEvent, "Bearish") ? bearColor : neutralColor, bgcolor = panelColor)
+    table.cell(dash, 0, 11, "OB / FVG", text_color = neutralColor, bgcolor = panelColor)
+    table.cell(dash, 1, 11, (obActive ? zoneText : "OB …") + " / " + (fvgActive ? fvgText : "FVG …"), text_color = obActive ? (activeBullish ? bullColor : bearColor) : neutralColor, bgcolor = panelColor, text_size = size.tiny)
+    table.cell(dash, 0, 12, "OTE / HTF", text_color = neutralColor, bgcolor = panelColor)
+    table.cell(dash, 1, 12, (dashboardOTE ? "OTE ✓" : "OTE …") + " / " + biasText, text_color = dashboardOTE ? bullColor : neutralColor, bgcolor = panelColor, text_size = size.tiny)
+    table.cell(dash, 0, 13, "Session", text_color = neutralColor, bgcolor = panelColor)
+    table.cell(dash, 1, 13, activeSessionText, text_color = activeSessionText != "Inactive" ? bullColor : neutralColor, bgcolor = panelColor)
 
-            table.cell(dash, 0, 16, "TRADE DECISION", text_color = color.white, bgcolor = color.new(color.black, 0))
-            table.cell(dash, 1, 16, "", bgcolor = color.new(color.black, 0))
-            table.cell(dash, 0, 17, "Bias", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 17, lastDecision, text_color = lastDecision == "BUY" ? bullColor : lastDecision == "SELL" ? bearColor : neutralColor, bgcolor = panelColor, text_size = size.large)
-            table.cell(dash, 0, 18, "Score", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 18, str.tostring(lastScore) + "%", text_color = lastScore >= minimumScore ? bullColor : neutralColor, bgcolor = panelColor)
-            table.cell(dash, 0, 19, "Grade", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 19, lastGrade, text_color = lastScore >= minimumScore ? bullColor : neutralColor, bgcolor = panelColor)
+    table.cell(dash, 0, 14, "TRADE DECISION", text_color = color.white, bgcolor = color.new(color.black, 0))
+    table.cell(dash, 1, 14, "", bgcolor = color.new(color.black, 0))
+    table.cell(dash, 0, 15, "Decision", text_color = neutralColor, bgcolor = panelColor)
+    table.cell(dash, 1, 15, lastDecision, text_color = decisionColor, bgcolor = panelColor, text_size = size.large)
+    table.cell(dash, 0, 16, "Score / Grade", text_color = neutralColor, bgcolor = panelColor)
+    table.cell(dash, 1, 16, compactScore, text_color = lastScore >= minimumScore ? bullColor : neutralColor, bgcolor = panelColor)
+    table.cell(dash, 0, 17, "Objective", text_color = neutralColor, bgcolor = panelColor)
+    table.cell(dash, 1, 17, currentObjectiveText, text_color = marketDirectionColor, bgcolor = panelColor, text_size = size.tiny)
+    table.cell(dash, 0, 18, "Next Event", text_color = neutralColor, bgcolor = panelColor)
+    table.cell(dash, 1, 18, expectedNextEventText, text_color = marketDirectionColor, bgcolor = panelColor, text_size = size.tiny)
+    table.cell(dash, 0, 19, "Bull / Bear", text_color = neutralColor, bgcolor = panelColor)
+    table.cell(dash, 1, 19, str.tostring(decisionBullScore) + "% / " + str.tostring(decisionBearScore) + "%", text_color = decisionBullScore > decisionBearScore ? bullColor : decisionBearScore > decisionBullScore ? bearColor : neutralColor, bgcolor = panelColor)
 
-            table.cell(dash, 0, 20, "OTE ZONE (61.8%-79%)", text_color = color.white, bgcolor = color.new(color.black, 0))
-            table.cell(dash, 1, 20, "", bgcolor = color.new(color.black, 0))
-            table.cell(dash, 0, 21, "External High", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 21, extRangeValid ? str.tostring(oteHigh, format.mintick) : "—", text_color = color.white, bgcolor = panelColor)
-            table.cell(dash, 0, 22, "79% / 61.8%", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 22, extRangeValid ? str.tostring(ote79, format.mintick) + " / " + str.tostring(ote618, format.mintick) : "—", text_color = bullColor, bgcolor = panelColor)
-            table.cell(dash, 0, 23, "External Low", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 23, extRangeValid ? str.tostring(oteLow, format.mintick) : "—", text_color = color.white, bgcolor = panelColor)
-
-            table.cell(dash, 0, 24, "SMART TRADE PLAN", text_color = color.white, bgcolor = color.new(color.black, 0))
-            table.cell(dash, 1, 24, showSmartTradePanel ? lastPlanDirection : "Hidden", text_color = lastPlanDirection == "LONG" ? bullColor : lastPlanDirection == "SHORT" ? bearColor : neutralColor, bgcolor = color.new(color.black, 0))
-            table.cell(dash, 0, 25, "Entry", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 25, showSmartTradePanel and not na(lastPlanEntry) ? str.tostring(lastPlanEntry, format.mintick) : "—", text_color = color.white, bgcolor = panelColor)
-            table.cell(dash, 0, 26, "Stop", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 26, showSmartTradePanel and not na(lastPlanStop) ? str.tostring(lastPlanStop, format.mintick) : "—", text_color = bearColor, bgcolor = panelColor)
-            table.cell(dash, 0, 27, "Target", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 27, showSmartTradePanel and not na(lastPlanTarget) ? str.tostring(lastPlanTarget, format.mintick) : "—", text_color = bullColor, bgcolor = panelColor)
-            table.cell(dash, 0, 28, "Risk : Reward", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 28, showSmartTradePanel and not na(lastPlanRR) ? "1 : " + str.tostring(lastPlanRR, "#.##") : "—", text_color = color.white, bgcolor = panelColor)
-            table.cell(dash, 0, 29, "Next Step", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 29, decisionNextStep, text_color = decisionRecommendation == "BUY" ? bullColor : decisionRecommendation == "SELL" ? bearColor : neutralColor, bgcolor = panelColor, text_size = size.tiny)
-
-            table.cell(dash, 0, 30, "NARRATIVE DETAIL", text_color = color.white, bgcolor = color.new(color.black, 0))
-            table.cell(dash, 1, 30, "", bgcolor = color.new(color.black, 0))
-            table.cell(dash, 0, 31, "Objective", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 31, currentObjectiveText, text_color = marketDirectionColor, bgcolor = panelColor, text_size = size.tiny)
-            table.cell(dash, 0, 32, "Next Event", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 32, expectedNextEventText, text_color = marketDirectionColor, bgcolor = panelColor, text_size = size.tiny)
-            table.cell(dash, 0, 33, "Bull / Bear Evidence", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 33, str.tostring(decisionBullScore) + "% / " + str.tostring(decisionBearScore) + "%", text_color = decisionBullScore > decisionBearScore ? bullColor : decisionBearScore > decisionBullScore ? bearColor : neutralColor, bgcolor = panelColor) decisionBullScore ? bearColor : neutralColor, bgcolor = panelColor)
+    table.cell(dash, 0, 20, "TRADE PLAN", text_color = color.white, bgcolor = color.new(color.black, 0))
+    table.cell(dash, 1, 20, dashboardPlanText, text_color = lastPlanDirection == "LONG" ? bullColor : lastPlanDirection == "SHORT" ? bearColor : neutralColor, bgcolor = color.new(color.black, 0))
+    table.cell(dash, 0, 21, "Entry / Stop", text_color = neutralColor, bgcolor = panelColor)
+    table.cell(dash, 1, 21, dashboardEntryStop, text_color = color.white, bgcolor = panelColor, text_size = size.tiny)
+    table.cell(dash, 0, 22, "Target / RR", text_color = neutralColor, bgcolor = panelColor)
+    table.cell(dash, 1, 22, dashboardTargetRR, text_color = bullColor, bgcolor = panelColor, text_size = size.tiny)
         else if isCompact
             table.cell(dash, 0, 0, "ICE", text_color = color.white, bgcolor = panelColor, text_size = size.small)
             table.cell(dash, 1, 0, decisionStage, text_color = decisionStage == "READY" ? bullColor : decisionStage == "CONFLICT" ? bearColor : neutralColor, bgcolor = panelColor, text_size = size.small)
