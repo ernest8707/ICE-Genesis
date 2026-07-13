@@ -1,6 +1,6 @@
 //@version=6
 indicator(
-     "ICE Genesis v1.0 - Market Narrative PR7",
+     "ICE Genesis v1.0 - Execution Engine PR1",
 shorttitle = "ICEGen",     overlay = true,
      max_labels_count = 250,
      max_lines_count = 200,
@@ -34,6 +34,7 @@ groupRisk      = "8. Trade Plan"
 groupVisual    = "9. Visuals"
 groupDashboard = "10. Adaptive Dashboard"
 groupInstitutionalBias = "11. Institutional Bias"
+groupExecution = "12. Execution Engine"
 showDashboard = input.bool(true, "Show dashboard", group = groupCore)
 dashboardMode = input.string("Full", "Dashboard mode", options = ["Full", "Morning Brief", "Execution", "Trade Management", "Compact", "Minimal", "Off"], group = groupDashboard)
 enableInstitutionalBias = input.bool(
@@ -97,6 +98,20 @@ showBiasDebug = input.bool(
     false,
     "Show Bias Debug Values",
     group = groupInstitutionalBias
+)
+
+executionRetestMemoryBars = input.int(
+     12,
+     "Retest memory bars",
+     minval = 1,
+     maxval = 100,
+     group = groupExecution
+)
+
+showExecutionDebug = input.bool(
+     false,
+     "Show Execution Debug Values",
+     group = groupExecution
 )
 
 minimumScore    = input.int(75, "Minimum setup score", minval = 0, maxval = 100, step = 5, group = groupCore)
@@ -1189,6 +1204,68 @@ marketBriefingText = decisionLongReady ? "BUY active. Manage plan. Avoid shorts.
      "No clean story. Wait."
 
 //=============================================================================
+// 13B. EXECUTION ENGINE — PR1
+// Tracks OB/FVG retests without changing BUY / SELL logic.
+//=============================================================================
+executionZoneOverlap(float zoneTop, float zoneBottom) =>
+    not na(zoneTop) and not na(zoneBottom) and high >= zoneBottom and low <= zoneTop
+
+bullOBRetestNow = (obActive or obMitigated) and activeBullish and executionZoneOverlap(activeOBTop, activeOBBottom)
+bearOBRetestNow = (obActive or obMitigated) and not activeBullish and executionZoneOverlap(activeOBTop, activeOBBottom)
+
+bullFVGRetestNow = (fvgActive or fvgFilled) and activeBullish and executionZoneOverlap(activeFVGTop, activeFVGBottom)
+bearFVGRetestNow = (fvgActive or fvgFilled) and not activeBullish and executionZoneOverlap(activeFVGTop, activeFVGBottom)
+
+var int lastBullOBRetestBar = na
+var int lastBearOBRetestBar = na
+var int lastBullFVGRetestBar = na
+var int lastBearFVGRetestBar = na
+
+if bullOBRetestNow
+    lastBullOBRetestBar := bar_index
+
+if bearOBRetestNow
+    lastBearOBRetestBar := bar_index
+
+if bullFVGRetestNow
+    lastBullFVGRetestBar := bar_index
+
+if bearFVGRetestNow
+    lastBearFVGRetestBar := bar_index
+
+recentBullOBRetest = not na(lastBullOBRetestBar) and bar_index - lastBullOBRetestBar <= executionRetestMemoryBars
+recentBearOBRetest = not na(lastBearOBRetestBar) and bar_index - lastBearOBRetestBar <= executionRetestMemoryBars
+recentBullFVGRetest = not na(lastBullFVGRetestBar) and bar_index - lastBullFVGRetestBar <= executionRetestMemoryBars
+recentBearFVGRetest = not na(lastBearFVGRetestBar) and bar_index - lastBearFVGRetestBar <= executionRetestMemoryBars
+
+executionDirectionalOBRetest = decisionDirection == 1 ? recentBullOBRetest :
+     decisionDirection == -1 ? recentBearOBRetest :
+     recentBullOBRetest or recentBearOBRetest
+
+executionDirectionalFVGRetest = decisionDirection == 1 ? recentBullFVGRetest :
+     decisionDirection == -1 ? recentBearFVGRetest :
+     recentBullFVGRetest or recentBearFVGRetest
+
+executionRetestText = executionDirectionalOBRetest and executionDirectionalFVGRetest ? "OB + FVG Retest" :
+     executionDirectionalOBRetest ? "OB Retest" :
+     executionDirectionalFVGRetest ? "FVG Retest" : "No Retest"
+
+executionStatusText = decisionLongReady or decisionShortReady ? "Triggered" :
+     decisionConflict ? "Stand Down" :
+     executionDirectionalOBRetest or executionDirectionalFVGRetest ? "Retesting" :
+     decisionDirection == 1 or decisionDirection == -1 ? "Preparing" : "Not Ready"
+
+executionConfirmationText = decisionLongReady ? "Bullish Confirmation" :
+     decisionShortReady ? "Bearish Confirmation" : "Waiting"
+
+executionEntryPermissionText = decisionLongReady ? "Long Trigger" :
+     decisionShortReady ? "Short Trigger" : "Wait"
+
+plot(showExecutionDebug ? (executionDirectionalOBRetest ? 1 : 0) : na, "Execution OB Retest", display = display.data_window)
+plot(showExecutionDebug ? (executionDirectionalFVGRetest ? 1 : 0) : na, "Execution FVG Retest", display = display.data_window)
+plot(showExecutionDebug ? (executionStatusText == "Triggered" ? 3 : executionStatusText == "Retesting" ? 2 : executionStatusText == "Preparing" ? 1 : 0) : na, "Execution Status Value", display = display.data_window)
+
+//=============================================================================
 // 13. TRADE PLAN
 //=============================================================================
 var line entryLine = na
@@ -1335,7 +1412,7 @@ if barstate.islast
 
                if isMorningBrief
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 NARR PR7", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 EXEC PR1", text_color = color.white, bgcolor = panelColor, text_size = size.small)
             table.cell(dash, 0, 1, "MORNING BRIEF", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 1, "", bgcolor = color.new(color.black, 0))
 
@@ -1384,17 +1461,23 @@ if barstate.islast
             table.cell(dash, 0, 5, "OB / FVG", text_color = neutralColor, bgcolor = panelColor)
             table.cell(dash, 1, 5, (obActive ? zoneText : "OB ...") + " / " + (fvgActive ? fvgText : "FVG ..."), text_color = obActive ? (activeBullish ? bullColor : bearColor) : neutralColor, bgcolor = panelColor, text_size = size.tiny)
 
-            table.cell(dash, 0, 6, "OTE / HTF", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 6, (dashboardOTE ? "OTE OK" : "OTE ...") + " / " + biasText, text_color = dashboardOTE ? bullColor : neutralColor, bgcolor = panelColor, text_size = size.tiny)
+            table.cell(dash, 0, 6, "Retest", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 6, executionRetestText, text_color = executionRetestText == "No Retest" ? neutralColor : marketDirectionColor, bgcolor = panelColor)
 
-            table.cell(dash, 0, 7, "Objective", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 7, currentObjectiveText, text_color = marketDirectionColor, bgcolor = panelColor, text_size = size.tiny)
+            table.cell(dash, 0, 7, "Execution", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 7, executionStatusText, text_color = executionStatusText == "Triggered" ? bullColor : executionStatusText == "Stand Down" ? bearColor : neutralColor, bgcolor = panelColor)
 
-            table.cell(dash, 0, 8, "Next Event", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 8, expectedNextEventText, text_color = marketDirectionColor, bgcolor = panelColor, text_size = size.tiny)
+            table.cell(dash, 0, 8, "OTE / HTF", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 8, (dashboardOTE ? "OTE OK" : "OTE ...") + " / " + biasText, text_color = dashboardOTE ? bullColor : neutralColor, bgcolor = panelColor, text_size = size.tiny)
 
-            table.cell(dash, 0, 9, "Briefing", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 9, marketBriefingText, text_color = marketDirectionColor, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 0, 9, "Objective", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 9, currentObjectiveText, text_color = marketDirectionColor, bgcolor = panelColor, text_size = size.tiny)
+
+            table.cell(dash, 0, 10, "Next Event", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 10, expectedNextEventText, text_color = marketDirectionColor, bgcolor = panelColor, text_size = size.tiny)
+
+            table.cell(dash, 0, 11, "Briefing", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 11, marketBriefingText, text_color = marketDirectionColor, bgcolor = panelColor, text_size = size.small)
 
         else if isTradeManagement
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
