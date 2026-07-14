@@ -1,6 +1,6 @@
 //@version=6
 indicator(
-     "ICE Genesis v1.0 - Execution Engine PR5",
+     "ICE Genesis v1.0 - Chart Readability PR9",
 shorttitle = "ICEGen",     overlay = true,
      max_labels_count = 250,
      max_lines_count = 200,
@@ -36,7 +36,7 @@ groupDashboard = "10. Adaptive Dashboard"
 groupInstitutionalBias = "11. Institutional Bias"
 groupExecution = "12. Execution Engine"
 showDashboard = input.bool(true, "Show dashboard", group = groupCore)
-dashboardMode = input.string("Full", "Dashboard mode", options = ["Full", "Morning Brief", "Execution", "Trade Management", "Compact", "Minimal", "Off"], group = groupDashboard)
+dashboardMode = input.string("Execution", "Dashboard mode", options = ["Full", "Morning Brief", "Execution", "Trade Management", "Compact", "Minimal", "Off"], group = groupDashboard)
 enableInstitutionalBias = input.bool(
      true,
      "Enable Institutional Bias Engine",
@@ -126,6 +126,20 @@ showExecutionConfirmationMarkers = input.bool(
      group = groupExecution
 )
 
+executionMarkerCooldownBars = input.int(
+     8,
+     "Execution marker cooldown bars",
+     minval = 0,
+     maxval = 100,
+     group = groupExecution
+)
+
+executionMarkersOncePerZone = input.bool(
+     true,
+     "Only show first execution marker per zone",
+     group = groupExecution
+)
+
 minimumScore    = input.int(75, "Minimum setup score", minval = 0, maxval = 100, step = 5, group = groupCore)
 minimumScoreSeparation = input.int(15, "Minimum bull / bear score separation", minval = 0, maxval = 50, step = 5, group = groupCore)
 requireOTEForDecision = input.bool(false, "Require OTE for BUY / SELL", group = groupCore)
@@ -158,7 +172,7 @@ showExternalLiquidity = input.bool(true, "Track external BSL / SSL", group = gro
 useEqualLiquidity = input.bool(true, "Track persistent EQH / EQL", group = groupLiquidity)
 equalToleranceATR = input.float(0.10, "Equal-level tolerance × ATR", minval = 0.01, step = 0.01, group = groupLiquidity)
 liquiditySweepMode = input.string("Wick Rejection", "Sweep confirmation", options = ["Wick Rejection", "Any Trade Through"], group = groupLiquidity)
-showUntouchedEqualLevels = input.bool(true, "Show untouched EQH / EQL", group = groupLiquidity)
+showUntouchedEqualLevels = input.bool(false, "Show untouched EQH / EQL", group = groupLiquidity)
 maxEqualLevels = input.int(6, "Maximum active EQH / EQL levels", minval = 1, maxval = 20, group = groupLiquidity)
 
 atrLength       = input.int(14, "ATR length", minval = 1, group = groupDisp)
@@ -169,10 +183,22 @@ displacementMemoryBars = input.int(12, "Remember displacement for dashboard (bar
 
 showOrderBlock  = input.bool(true, "Show validated order-block zones", group = groupZones)
 showFVG         = input.bool(true, "Show newest qualified FVG", group = groupZones)
+fvgLabelMode = input.string(
+     "None",
+     "FVG Label Mode",
+     options = ["Full", "Short", "None"],
+     group = groupZones
+)
 maxOBZones      = input.int(6, "Maximum visible order-block zones", minval = 1, maxval = 20, group = groupZones)
-obZoneOpacity   = input.int(78, "Order-block fill transparency", minval = 50, maxval = 95, group = groupZones)
-obBorderWidth   = input.int(2, "Order-block border width", minval = 1, maxval = 4, group = groupZones)
-showOBPriceText = input.bool(true, "Show OB type and price range inside zone", group = groupZones)
+obZoneOpacity   = input.int(88, "Order-block fill transparency", minval = 50, maxval = 95, group = groupZones)
+obBorderWidth   = input.int(1, "Order-block border width", minval = 1, maxval = 4, group = groupZones)
+showOBPriceText = input.bool(false, "Show OB type and price range inside zone", group = groupZones)
+orderBlockLabelMode = input.string(
+     "None",
+     "Order Block Label Mode",
+     options = ["Full", "Short", "None"],
+     group = groupZones
+)
 obSearchBars    = input.int(12, "Search back for order-block candle", minval = 2, maxval = 50, group = groupZones)
 useBodyForOB    = input.bool(false, "Use candle body for OB boundaries", group = groupZones)
 deleteMitigated = input.bool(true, "Delete mitigated zones", group = groupZones)
@@ -203,10 +229,42 @@ structureLineWidth = input.int(1, "Structure-line width", minval = 1, maxval = 3
 anchorStructureAtSwing = input.bool(true, "Anchor structure line at broken swing", group = groupVisual)
 structureLabelPosition = input.string("Near break", "Structure text position", options = ["Centered", "Near break"], group = groupVisual)
 fadeInternalStructure = input.bool(true, "Fade internal structure events", group = groupVisual)
-showSessionShading = input.bool(true, "Show Asia / London / New York shading", group = groupVisual)
-visualMode = input.string("Study", "Visual mode", options = ["Study", "Trading", "Minimal"], group = groupVisual)
+showSessionShading = input.bool(false, "Show Asia / London / New York shading", group = groupVisual)
+visualMode = input.string("Trading", "Visual mode", options = ["Study", "Trading", "Minimal"], group = groupVisual)
 showLiquidityLines = input.bool(true, "Show liquidity labels with dashed lines", group = groupVisual)
 liquidityLineBars = input.int(10, "Liquidity-line length (bars)", minval = 3, maxval = 50, group = groupVisual)
+liquidityLabelCooldownBars = input.int(
+     8,
+     "Liquidity label cooldown bars",
+     minval = 0,
+     maxval = 100,
+     group = groupVisual
+)
+liquidityLabelPriceSpacingATR = input.float(
+     0.20,
+     "Liquidity label price spacing × ATR",
+     minval = 0.0,
+     step = 0.05,
+     group = groupVisual
+)
+liquidityLabelsRequireOBContext = input.bool(
+     true,
+     "Only show liquidity labels with OB context",
+     group = groupVisual
+)
+liquidityLabelOBProximityATR = input.float(
+     1.00,
+     "Liquidity label OB proximity × ATR",
+     minval = 0.0,
+     step = 0.25,
+     group = groupVisual
+)
+chartLabelMode = input.string(
+     "Minimal",
+     "Chart Label Mode",
+     options = ["Full", "Short", "Minimal"],
+     group = groupVisual
+)
 showSmartTradePanel = input.bool(true, "Show smart trade planner in dashboard", group = groupVisual)
 asiaSession = input.session("1900-0200", "Asia session", group = groupTime)
 londonSession = input.session("0200-0500", "London session", group = groupTime)
@@ -226,6 +284,39 @@ chochBearColor = color.orange
 asiaShade = color.new(color.rgb(176, 132, 32), 91)
 londonShade = color.new(color.rgb(35, 95, 180), 91)
 newYorkShade = color.new(color.rgb(130, 70, 170), 91)
+
+//=============================================================================
+// 2A. CHART READABILITY LABEL TEXT — PR9
+// Centralized label text for Full / Short / Minimal chart display modes.
+// PR9 finalizes clean default settings while preserving PR8 marker de-duplication.
+//=============================================================================
+labelModeFull = chartLabelMode == "Full"
+labelModeShort = chartLabelMode == "Short"
+labelModeMinimal = chartLabelMode == "Minimal"
+
+labelBSLTaken = labelModeFull ? "BSL  Taken ✓" : labelModeShort ? "BSL ✓" : "BSL"
+labelSSLTaken = labelModeFull ? "SSL  Taken ✓" : labelModeShort ? "SSL ✓" : "SSL"
+labelEQHTaken = labelModeFull ? "EQH  Taken ✓" : labelModeShort ? "EQH ✓" : "EQH"
+labelEQLTaken = labelModeFull ? "EQL  Taken ✓" : labelModeShort ? "EQL ✓" : "EQL"
+
+labelEQHUntouched = labelModeFull ? "EQH  Untouched" : labelModeShort ? "EQH" : "EQH"
+labelEQLUntouched = labelModeFull ? "EQL  Untouched" : labelModeShort ? "EQL" : "EQL"
+
+labelBullBOS = labelModeFull ? "Bullish BOS" : labelModeShort ? "BOS ↑" : "BOS"
+labelBearBOS = labelModeFull ? "Bearish BOS" : labelModeShort ? "BOS ↓" : "BOS"
+labelBullCHoCH = labelModeFull ? "Bullish CHoCH" : labelModeShort ? "CH ↑" : "CH"
+labelBearCHoCH = labelModeFull ? "Bearish CHoCH" : labelModeShort ? "CH ↓" : "CH"
+
+labelRetest = labelModeFull ? "RT" : labelModeShort ? "RT" : "R"
+labelConfirmation = labelModeFull ? "CONF" : labelModeShort ? "CNF" : "C"
+
+obLabelModeFull = orderBlockLabelMode == "Full"
+obLabelModeShort = orderBlockLabelMode == "Short"
+obLabelModeNone = orderBlockLabelMode == "None"
+
+fvgLabelModeFull = fvgLabelMode == "Full"
+fvgLabelModeShort = fvgLabelMode == "Short"
+fvgLabelModeNone = fvgLabelMode == "None"
 
 //=============================================================================
 // 3. CURRENT-TIMEFRAME EMA CONTEXT
@@ -452,7 +543,7 @@ newEqualLow = useEqualLiquidity and not na(extPL) and not na(lastExtLow[1]) and 
 addEqualLevel(bool isHigh, float level, int leftBar) =>
     color levelColor = liqColor
     line ln = line.new(leftBar, level, bar_index, level, xloc = xloc.bar_index, extend = extend.right, color = color.new(levelColor, 10), width = 1, style = line.style_dashed)
-    label lb = label.new(bar_index, level, isHigh ? "EQH  Untouched" : "EQL  Untouched", xloc = xloc.bar_index, yloc = yloc.price, style = label.style_none, textcolor = levelColor, size = size.tiny)
+    label lb = label.new(bar_index, level, isHigh ? labelEQHUntouched : labelEQLUntouched, xloc = xloc.bar_index, yloc = yloc.price, style = label.style_none, textcolor = levelColor, size = size.tiny)
     if isHigh
         array.push(eqHighLevels, level)
         array.push(eqHighLines, ln)
@@ -496,7 +587,7 @@ if array.size(eqHighLevels) > 0
             line.set_extend(ln, extend.none)
             line.set_x2(ln, bar_index)
             line.set_color(ln, color.new(bearColor, 25))
-            label.set_text(lb, "EQH  Taken ✓")
+            label.set_text(lb, labelEQHTaken)
             label.set_textcolor(lb, bearColor)
             array.remove(eqHighLevels, i)
             array.remove(eqHighLines, i)
@@ -517,7 +608,7 @@ if array.size(eqLowLevels) > 0
             line.set_extend(ln, extend.none)
             line.set_x2(ln, bar_index)
             line.set_color(ln, color.new(bullColor, 25))
-            label.set_text(lb, "EQL  Taken ✓")
+            label.set_text(lb, labelEQLTaken)
             label.set_textcolor(lb, bullColor)
             array.remove(eqLowLevels, i)
             array.remove(eqLowLines, i)
@@ -533,15 +624,19 @@ var int lastBSLSweepBar = na
 var int lastSSLSweepBar = na
 var string lastLiquidityEvent = "None"
 var float lastLiquidityLevel = na
+var float lastBSLSweepLevel = na
+var float lastSSLSweepLevel = na
 
 if buySideSweep
     lastBSLSweepBar := bar_index
     lastLiquidityLevel := pdhSweep ? pdh : pwhSweep ? pwh : eqhSweep ? eqhSweepLevel : internalBSLSweep ? lastIntHigh : lastExtHigh
+    lastBSLSweepLevel := lastLiquidityLevel
     lastLiquidityEvent := pdhSweep ? "PDH swept" : pwhSweep ? "PWH swept" : eqhSweep ? "EQH swept" : internalBSLSweep ? "Internal BSL swept" : "External BSL swept"
 
 if sellSideSweep
     lastSSLSweepBar := bar_index
     lastLiquidityLevel := pdlSweep ? pdl : pwlSweep ? pwl : eqlSweep ? eqlSweepLevel : internalSSLSweep ? lastIntLow : lastExtLow
+    lastSSLSweepLevel := lastLiquidityLevel
     lastLiquidityEvent := pdlSweep ? "PDL swept" : pwlSweep ? "PWL swept" : eqlSweep ? "EQL swept" : internalSSLSweep ? "Internal SSL swept" : "External SSL swept"
 
 recentBSLSweep = not na(lastBSLSweepBar) and bar_index - lastBSLSweepBar <= sweepToBreakBars
@@ -560,13 +655,12 @@ addLiquidityMark(string txt, float level, color markColor) =>
             line.delete(array.shift(liquidityLines))
             label.delete(array.shift(liquidityLabels))
 
-if buySideSweep
-    addLiquidityMark("BSL  Taken ✓", lastLiquidityLevel, bearColor)
-if sellSideSweep
-    addLiquidityMark("SSL  Taken ✓", lastLiquidityLevel, bullColor)
-
-plotshape(showSweepMarks and not showLiquidityLines and buySideSweep, "Buy-side sweep", shape.xcross, location.abovebar, liqColor, size = size.tiny, text = "BSL")
-plotshape(showSweepMarks and not showLiquidityLines and sellSideSweep, "Sell-side sweep", shape.xcross, location.belowbar, liqColor, size = size.tiny, text = "SSL")
+// Liquidity labels are drawn later, after OB validation, so BSL / SSL marks
+// only appear where an institutional footprint is confirmed.
+var int lastBSLMarkBar = na
+var int lastSSLMarkBar = na
+var float lastBSLMarkLevel = na
+var float lastSSLMarkLevel = na
 
 //=============================================================================
 // 8. MARKET STRUCTURE ENGINE 2.0 — CLASSIFICATION & STATE
@@ -805,21 +899,21 @@ addStructureMark(string txt, int swingBar, float level, color markColor, bool ex
             label.delete(array.shift(structureLabels))
 
 if showInternalEvents and internalBullCHoCH
-    addStructureMark("CHoCH", lastIntHighBar, lastIntHigh, chochBullColor, false)
+    addStructureMark(labelBullCHoCH, lastIntHighBar, lastIntHigh, chochBullColor, false)
 if showInternalEvents and internalBearCHoCH
-    addStructureMark("CHoCH", lastIntLowBar, lastIntLow, chochBearColor, false)
+    addStructureMark(labelBearCHoCH, lastIntLowBar, lastIntLow, chochBearColor, false)
 if showInternalEvents and internalBullBOS
-    addStructureMark("BOS", lastIntHighBar, lastIntHigh, bullColor, false)
+    addStructureMark(labelBullBOS, lastIntHighBar, lastIntHigh, bullColor, false)
 if showInternalEvents and internalBearBOS
-    addStructureMark("BOS", lastIntLowBar, lastIntLow, bearColor, false)
+    addStructureMark(labelBearBOS, lastIntLowBar, lastIntLow, bearColor, false)
 if showExternalEvents and externalBullCHoCH
-    addStructureMark("CHoCH", lastExtHighBar, lastExtHigh, chochBullColor, true)
+    addStructureMark(labelBullCHoCH, lastExtHighBar, lastExtHigh, chochBullColor, true)
 if showExternalEvents and externalBearCHoCH
-    addStructureMark("CHoCH", lastExtLowBar, lastExtLow, chochBearColor, true)
+    addStructureMark(labelBearCHoCH, lastExtLowBar, lastExtLow, chochBearColor, true)
 if showExternalEvents and externalBullBOS
-    addStructureMark("BOS", lastExtHighBar, lastExtHigh, bullColor, true)
+    addStructureMark(labelBullBOS, lastExtHighBar, lastExtHigh, bullColor, true)
 if showExternalEvents and externalBearBOS
-    addStructureMark("BOS", lastExtLowBar, lastExtLow, bearColor, true)
+    addStructureMark(labelBearBOS, lastExtLowBar, lastExtLow, bearColor, true)
 
 //=============================================================================
 // 12. HIGHLIGHTED ORDER-BLOCK / FVG ZONES
@@ -840,21 +934,21 @@ var bool fvgActive = false
 var int activeZoneCreatedBar = na
 
 addOBZone(bool bullish, int leftBar, float zoneTop, float zoneBottom) =>
-    string directionText = bullish ? "Bullish OB" : "Bearish OB"
     string priceText = str.tostring(zoneTop, format.mintick) + " - " + str.tostring(zoneBottom, format.mintick)
     string fullDirectionText = bullish ? "Bullish Order Block" : "Bearish Order Block"
-    string zoneTextLabel = showOBPriceText ? "NEWEST  •  " + fullDirectionText + "\n" + priceText : fullDirectionText
+    string shortDirectionText = bullish ? "Bullish OB" : "Bearish OB"
+    string zoneTextLabel = obLabelModeFull and showOBPriceText ? "NEWEST  •  " + fullDirectionText + "\n" + priceText : obLabelModeShort ? shortDirectionText : ""
     color zoneColor = bullish ? bullColor : bearColor
     box newZone = box.new(
          leftBar, zoneTop, bar_index, zoneBottom,
          xloc = xloc.bar_index,
          extend = extend.right,
-         border_color = zoneColor,
+         border_color = color.new(zoneColor, 0),
          border_width = obBorderWidth,
          bgcolor = color.new(zoneColor, obZoneOpacity),
          text = zoneTextLabel,
          text_color = color.white,
-         text_size = size.small,
+         text_size = obLabelModeFull ? size.tiny : size.tiny,
          text_halign = text.align_center,
          text_valign = text.align_center
      )
@@ -862,6 +956,14 @@ addOBZone(bool bullish, int leftBar, float zoneTop, float zoneBottom) =>
     if array.size(obBoxes) > maxOBZones
         box.delete(array.shift(obBoxes))
     newZone
+
+obMitigatedText(bool bullish) =>
+    obLabelModeFull ? (bullish ? "Bullish OB  MITIGATED" : "Bearish OB  MITIGATED") : obLabelModeShort ? "OB MIT" : ""
+
+fvgZoneText(bool bullish, float zoneTop, float zoneBottom) =>
+    string priceText = str.tostring(zoneTop, format.mintick) + " - " + str.tostring(zoneBottom, format.mintick)
+    string directionText = bullish ? "Bullish FVG" : "Bearish FVG"
+    fvgLabelModeFull ? directionText + "\n" + priceText : fvgLabelModeShort ? "FVG" : ""
 
 // Draw the zone as soon as structure + displacement validate the OB.
 // Full qualification remains responsible for arrows and trade plans.
@@ -888,7 +990,7 @@ if bullOBZoneSignal
              xloc = xloc.bar_index, extend = extend.right,
              border_color = color.new(bullColor, 5), border_width = 1, border_style = line.style_dashed,
              bgcolor = color.new(bullColor, 90),
-             text = "Bullish FVG  " + str.tostring(activeFVGTop, format.mintick) + " - " + str.tostring(activeFVGBottom, format.mintick),
+             text = fvgZoneText(true, activeFVGTop, activeFVGBottom),
              text_color = color.white, text_size = size.tiny,
              text_halign = text.align_center, text_valign = text.align_center
          )
@@ -913,7 +1015,7 @@ if bearOBZoneSignal
              xloc = xloc.bar_index, extend = extend.right,
              border_color = color.new(bearColor, 5), border_width = 1, border_style = line.style_dashed,
              bgcolor = color.new(bearColor, 90),
-             text = "Bearish FVG  " + str.tostring(activeFVGTop, format.mintick) + " - " + str.tostring(activeFVGBottom, format.mintick),
+             text = fvgZoneText(false, activeFVGTop, activeFVGBottom),
              text_color = color.white, text_size = size.tiny,
              text_halign = text.align_center, text_valign = text.align_center
          )
@@ -944,7 +1046,7 @@ if obMitigated
             box.set_extend(activeOB, extend.none)
             box.set_right(activeOB, bar_index)
             box.set_bgcolor(activeOB, color.new(activeBullish ? bullColor : bearColor, 92))
-            box.set_text(activeOB, (activeBullish ? "Bullish OB" : "Bearish OB") + "  MITIGATED")
+            box.set_text(activeOB, obMitigatedText(activeBullish))
 
 if fvgFilled
     fvgActive := false
@@ -955,6 +1057,40 @@ if fvgFilled
         box.set_extend(activeFVG, extend.none)
         box.set_right(activeFVG, bar_index)
         box.set_bgcolor(activeFVG, color.new(fvgColor, 93))
+
+//=============================================================================
+// 12A. INSTITUTIONAL LIQUIDITY LABEL FILTER — PR4
+// Only prints BSL / SSL labels when a matching validated OB footprint appears.
+// Raw liquidity sweeps are still tracked internally for scoring and decisions.
+//=============================================================================
+liquidityLevelNearActiveOB(float level) =>
+    not na(level) and not na(activeOBTop) and not na(activeOBBottom) and
+     level <= activeOBTop + atr * liquidityLabelOBProximityATR and
+     level >= activeOBBottom - atr * liquidityLabelOBProximityATR
+
+sslHasOBContext = bullOBZoneSignal and recentSSLSweep and (not liquidityLabelsRequireOBContext or liquidityLevelNearActiveOB(lastSSLSweepLevel))
+bslHasOBContext = bearOBZoneSignal and recentBSLSweep and (not liquidityLabelsRequireOBContext or liquidityLevelNearActiveOB(lastBSLSweepLevel))
+
+sslInstitutionalMarkOldEnough = na(lastSSLMarkBar) or bar_index - lastSSLMarkBar > liquidityLabelCooldownBars
+sslInstitutionalMarkFarEnough = na(lastSSLMarkLevel) or math.abs(lastSSLSweepLevel - lastSSLMarkLevel) > atr * liquidityLabelPriceSpacingATR
+sslInstitutionalMarkAllowed = sslInstitutionalMarkOldEnough or sslInstitutionalMarkFarEnough
+
+bslInstitutionalMarkOldEnough = na(lastBSLMarkBar) or bar_index - lastBSLMarkBar > liquidityLabelCooldownBars
+bslInstitutionalMarkFarEnough = na(lastBSLMarkLevel) or math.abs(lastBSLSweepLevel - lastBSLMarkLevel) > atr * liquidityLabelPriceSpacingATR
+bslInstitutionalMarkAllowed = bslInstitutionalMarkOldEnough or bslInstitutionalMarkFarEnough
+
+if sslHasOBContext and sslInstitutionalMarkAllowed
+    addLiquidityMark(labelSSLTaken, lastSSLSweepLevel, bullColor)
+    lastSSLMarkBar := bar_index
+    lastSSLMarkLevel := lastSSLSweepLevel
+
+if bslHasOBContext and bslInstitutionalMarkAllowed
+    addLiquidityMark(labelBSLTaken, lastBSLSweepLevel, bearColor)
+    lastBSLMarkBar := bar_index
+    lastBSLMarkLevel := lastBSLSweepLevel
+
+plotshape(showSweepMarks and not showLiquidityLines and sslHasOBContext and sslInstitutionalMarkAllowed, "Sell-side institutional liquidity mark", shape.xcross, location.belowbar, liqColor, size = size.tiny, text = "SSL")
+plotshape(showSweepMarks and not showLiquidityLines and bslHasOBContext and bslInstitutionalMarkAllowed, "Buy-side institutional liquidity mark", shape.xcross, location.abovebar, liqColor, size = size.tiny, text = "BSL")
 
 //=============================================================================
 // 13. DECISION ENGINE 2.0 — PR3
@@ -1216,8 +1352,9 @@ marketBriefingText = decisionLongReady ? "BUY active. Manage plan. Avoid shorts.
      "No clean story. Wait."
 
 //=============================================================================
-// 13B. EXECUTION ENGINE — PR5
-// Tracks retests, confirmation candles, entry permission, retest markers, and confirmation markers without changing BUY / SELL logic.
+// 13B. EXECUTION ENGINE — PR8 / PR9
+// Tracks retests, confirmation candles, entry permission, and de-duplicated visual markers without changing BUY / SELL logic.
+// PR9 keeps this execution logic unchanged and only polishes default visual settings.
 //=============================================================================
 executionZoneOverlap(float zoneTop, float zoneBottom) =>
     not na(zoneTop) and not na(zoneBottom) and high >= zoneBottom and low <= zoneTop
@@ -1314,11 +1451,64 @@ plot(showExecutionDebug ? (executionDirectionalConfirmation ? 1 : 0) : na, "Exec
 plot(showExecutionDebug ? (executionStatusText == "Triggered" ? 4 : executionStatusText == "Confirmation" ? 3 : executionStatusText == "Retesting" ? 2 : executionStatusText == "Preparing" ? 1 : 0) : na, "Execution Status Value", display = display.data_window)
 plot(showExecutionDebug ? (executionEntryPermissionText == "Long Trigger" ? 2 : executionEntryPermissionText == "Short Trigger" ? -2 : executionEntryPermissionText == "Confirmation Ready" ? 1 : 0) : na, "Execution Entry Permission", display = display.data_window)
 
-plotshape(showExecutionRetestMarkers and visualMode != "Minimal" and executionBullRetestSignal, "Bullish execution retest marker", shape.circle, location.belowbar, bullColor, size = size.tiny, text = "RT")
-plotshape(showExecutionRetestMarkers and visualMode != "Minimal" and executionBearRetestSignal, "Bearish execution retest marker", shape.circle, location.abovebar, bearColor, size = size.tiny, text = "RT")
+// PR8 visual de-duplication.
+// Execution states still update normally; only repeated chart markers are filtered.
+var int lastBullRetestMarkerBar = na
+var int lastBearRetestMarkerBar = na
+var int lastBullConfirmationMarkerBar = na
+var int lastBearConfirmationMarkerBar = na
+var int lastBullRetestMarkerZoneBar = na
+var int lastBearRetestMarkerZoneBar = na
+var int lastBullConfirmationMarkerZoneBar = na
+var int lastBearConfirmationMarkerZoneBar = na
 
-plotshape(showExecutionConfirmationMarkers and visualMode != "Minimal" and executionBullConfirmationSignal, "Bullish execution confirmation marker", shape.labelup, location.belowbar, bullColor, size = size.tiny, text = "CONF", textcolor = color.white)
-plotshape(showExecutionConfirmationMarkers and visualMode != "Minimal" and executionBearConfirmationSignal, "Bearish execution confirmation marker", shape.labeldown, location.abovebar, bearColor, size = size.tiny, text = "CONF", textcolor = color.white)
+bullRetestMarkerCooldownOK = na(lastBullRetestMarkerBar) or bar_index - lastBullRetestMarkerBar > executionMarkerCooldownBars
+bearRetestMarkerCooldownOK = na(lastBearRetestMarkerBar) or bar_index - lastBearRetestMarkerBar > executionMarkerCooldownBars
+bullConfirmationMarkerCooldownOK = na(lastBullConfirmationMarkerBar) or bar_index - lastBullConfirmationMarkerBar > executionMarkerCooldownBars
+bearConfirmationMarkerCooldownOK = na(lastBearConfirmationMarkerBar) or bar_index - lastBearConfirmationMarkerBar > executionMarkerCooldownBars
+
+bullRetestMarkerZoneOK = not executionMarkersOncePerZone or na(activeZoneCreatedBar) or na(lastBullRetestMarkerZoneBar) or lastBullRetestMarkerZoneBar != activeZoneCreatedBar
+bearRetestMarkerZoneOK = not executionMarkersOncePerZone or na(activeZoneCreatedBar) or na(lastBearRetestMarkerZoneBar) or lastBearRetestMarkerZoneBar != activeZoneCreatedBar
+bullConfirmationMarkerZoneOK = not executionMarkersOncePerZone or na(activeZoneCreatedBar) or na(lastBullConfirmationMarkerZoneBar) or lastBullConfirmationMarkerZoneBar != activeZoneCreatedBar
+bearConfirmationMarkerZoneOK = not executionMarkersOncePerZone or na(activeZoneCreatedBar) or na(lastBearConfirmationMarkerZoneBar) or lastBearConfirmationMarkerZoneBar != activeZoneCreatedBar
+
+executionBullRetestMarkerSignal = executionBullRetestSignal and bullRetestMarkerCooldownOK and bullRetestMarkerZoneOK
+executionBearRetestMarkerSignal = executionBearRetestSignal and bearRetestMarkerCooldownOK and bearRetestMarkerZoneOK
+executionBullConfirmationMarkerSignal = executionBullConfirmationSignal and bullConfirmationMarkerCooldownOK and bullConfirmationMarkerZoneOK
+executionBearConfirmationMarkerSignal = executionBearConfirmationSignal and bearConfirmationMarkerCooldownOK and bearConfirmationMarkerZoneOK
+
+if executionBullRetestMarkerSignal
+    lastBullRetestMarkerBar := bar_index
+    lastBullRetestMarkerZoneBar := activeZoneCreatedBar
+
+if executionBearRetestMarkerSignal
+    lastBearRetestMarkerBar := bar_index
+    lastBearRetestMarkerZoneBar := activeZoneCreatedBar
+
+if executionBullConfirmationMarkerSignal
+    lastBullConfirmationMarkerBar := bar_index
+    lastBullConfirmationMarkerZoneBar := activeZoneCreatedBar
+
+if executionBearConfirmationMarkerSignal
+    lastBearConfirmationMarkerBar := bar_index
+    lastBearConfirmationMarkerZoneBar := activeZoneCreatedBar
+
+plot(showExecutionDebug ? (executionBullRetestMarkerSignal ? 1 : 0) : na, "Bullish execution retest marker allowed", display = display.data_window)
+plot(showExecutionDebug ? (executionBearRetestMarkerSignal ? 1 : 0) : na, "Bearish execution retest marker allowed", display = display.data_window)
+plot(showExecutionDebug ? (executionBullConfirmationMarkerSignal ? 1 : 0) : na, "Bullish execution confirmation marker allowed", display = display.data_window)
+plot(showExecutionDebug ? (executionBearConfirmationMarkerSignal ? 1 : 0) : na, "Bearish execution confirmation marker allowed", display = display.data_window)
+
+plotshape(showExecutionRetestMarkers and visualMode != "Minimal" and (labelModeFull or labelModeShort) and executionBullRetestMarkerSignal, "Bullish execution retest marker RT", shape.circle, location.belowbar, bullColor, size = size.tiny, text = "RT", textcolor = color.white)
+plotshape(showExecutionRetestMarkers and visualMode != "Minimal" and (labelModeFull or labelModeShort) and executionBearRetestMarkerSignal, "Bearish execution retest marker RT", shape.circle, location.abovebar, bearColor, size = size.tiny, text = "RT", textcolor = color.white)
+plotshape(showExecutionRetestMarkers and visualMode != "Minimal" and labelModeMinimal and executionBullRetestMarkerSignal, "Bullish execution retest marker R", shape.circle, location.belowbar, bullColor, size = size.tiny, text = "R", textcolor = color.white)
+plotshape(showExecutionRetestMarkers and visualMode != "Minimal" and labelModeMinimal and executionBearRetestMarkerSignal, "Bearish execution retest marker R", shape.circle, location.abovebar, bearColor, size = size.tiny, text = "R", textcolor = color.white)
+
+plotshape(showExecutionConfirmationMarkers and visualMode != "Minimal" and labelModeFull and executionBullConfirmationMarkerSignal, "Bullish execution confirmation marker CONF", shape.labelup, location.belowbar, bullColor, size = size.tiny, text = "CONF", textcolor = color.white)
+plotshape(showExecutionConfirmationMarkers and visualMode != "Minimal" and labelModeFull and executionBearConfirmationMarkerSignal, "Bearish execution confirmation marker CONF", shape.labeldown, location.abovebar, bearColor, size = size.tiny, text = "CONF", textcolor = color.white)
+plotshape(showExecutionConfirmationMarkers and visualMode != "Minimal" and labelModeShort and executionBullConfirmationMarkerSignal, "Bullish execution confirmation marker CNF", shape.labelup, location.belowbar, bullColor, size = size.tiny, text = "CNF", textcolor = color.white)
+plotshape(showExecutionConfirmationMarkers and visualMode != "Minimal" and labelModeShort and executionBearConfirmationMarkerSignal, "Bearish execution confirmation marker CNF", shape.labeldown, location.abovebar, bearColor, size = size.tiny, text = "CNF", textcolor = color.white)
+plotshape(showExecutionConfirmationMarkers and visualMode != "Minimal" and labelModeMinimal and executionBullConfirmationMarkerSignal, "Bullish execution confirmation marker C", shape.labelup, location.belowbar, bullColor, size = size.tiny, text = "C", textcolor = color.white)
+plotshape(showExecutionConfirmationMarkers and visualMode != "Minimal" and labelModeMinimal and executionBearConfirmationMarkerSignal, "Bearish execution confirmation marker C", shape.labeldown, location.abovebar, bearColor, size = size.tiny, text = "C", textcolor = color.white)
 
 //=============================================================================
 // 13. TRADE PLAN
@@ -1468,7 +1658,7 @@ if barstate.islast
 
         if isMorningBrief
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 EXEC PR5", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 READ PR9", text_color = color.white, bgcolor = panelColor, text_size = size.small)
             table.cell(dash, 0, 1, "MORNING BRIEF", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 1, "", bgcolor = color.new(color.black, 0))
 
@@ -1501,7 +1691,7 @@ if barstate.islast
 
         else if isExecutionFocus
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 EXEC PR5", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 READ PR9", text_color = color.white, bgcolor = panelColor, text_size = size.small)
             table.cell(dash, 0, 1, "EXECUTION FOCUS", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 1, lastDecision, text_color = decisionColor, bgcolor = color.new(color.black, 0), text_size = size.large)
 
@@ -1540,7 +1730,7 @@ if barstate.islast
 
         else if isTradeManagement
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 EXEC PR5", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 READ PR9", text_color = color.white, bgcolor = panelColor, text_size = size.small)
             table.cell(dash, 0, 1, "TRADE MANAGEMENT", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 1, lastPlanDirection, text_color = lastPlanDirection == "LONG" ? bullColor : lastPlanDirection == "SHORT" ? bearColor : neutralColor, bgcolor = color.new(color.black, 0), text_size = size.large)
 
@@ -1567,7 +1757,7 @@ if barstate.islast
 
         else if isFull
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 EXEC PR5", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 READ PR9", text_color = color.white, bgcolor = panelColor, text_size = size.small)
 
             table.cell(dash, 0, 1, "FULL DASHBOARD", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 1, "", bgcolor = color.new(color.black, 0))
