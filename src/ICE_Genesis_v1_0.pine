@@ -1,6 +1,6 @@
 //@version=6
 indicator(
-     "ICE Genesis v1.0 - Chart Readability PR9",
+     "ICE Genesis v1.0 - Execution Engine PR6",
 shorttitle = "ICEGen",     overlay = true,
      max_labels_count = 250,
      max_lines_count = 200,
@@ -137,6 +137,18 @@ executionMarkerCooldownBars = input.int(
 executionMarkersOncePerZone = input.bool(
      true,
      "Only show first execution marker per zone",
+     group = groupExecution
+)
+
+entryTriggerLockEnabled = input.bool(
+     true,
+     "Lock first entry trigger per zone",
+     group = groupExecution
+)
+
+showExecutionEntryTriggerMarkers = input.bool(
+     true,
+     "Show entry trigger markers",
      group = groupExecution
 )
 
@@ -286,9 +298,9 @@ londonShade = color.new(color.rgb(35, 95, 180), 91)
 newYorkShade = color.new(color.rgb(130, 70, 170), 91)
 
 //=============================================================================
-// 2A. CHART READABILITY LABEL TEXT — PR9
+// 2A. CHART READABILITY LABEL TEXT — PR9 / EXEC PR6
 // Centralized label text for Full / Short / Minimal chart display modes.
-// PR9 finalizes clean default settings while preserving PR8 marker de-duplication.
+// PR6 preserves clean defaults and adds entry-trigger labeling.
 //=============================================================================
 labelModeFull = chartLabelMode == "Full"
 labelModeShort = chartLabelMode == "Short"
@@ -309,6 +321,7 @@ labelBearCHoCH = labelModeFull ? "Bearish CHoCH" : labelModeShort ? "CH ↓" : "
 
 labelRetest = labelModeFull ? "RT" : labelModeShort ? "RT" : "R"
 labelConfirmation = labelModeFull ? "CONF" : labelModeShort ? "CNF" : "C"
+labelEntryTrigger = labelModeFull ? "TRIGGER" : labelModeShort ? "TRG" : "T"
 
 obLabelModeFull = orderBlockLabelMode == "Full"
 obLabelModeShort = orderBlockLabelMode == "Short"
@@ -1352,9 +1365,9 @@ marketBriefingText = decisionLongReady ? "BUY active. Manage plan. Avoid shorts.
      "No clean story. Wait."
 
 //=============================================================================
-// 13B. EXECUTION ENGINE — PR8 / PR9
-// Tracks retests, confirmation candles, entry permission, and de-duplicated visual markers without changing BUY / SELL logic.
-// PR9 keeps this execution logic unchanged and only polishes default visual settings.
+// 13B. EXECUTION ENGINE — PR6
+// Tracks retests, confirmation candles, entry permission, entry-trigger locks,
+// and de-duplicated visual markers without changing BUY / SELL logic.
 //=============================================================================
 executionZoneOverlap(float zoneTop, float zoneBottom) =>
     not na(zoneTop) and not na(zoneBottom) and high >= zoneBottom and low <= zoneTop
@@ -1435,21 +1448,81 @@ executionDirectionalConfirmation = decisionDirection == 1 ? recentBullConfirmati
 executionConfirmationText = recentBullConfirmation ? "Bullish Confirmation" :
      recentBearConfirmation ? "Bearish Confirmation" : "Waiting"
 
-executionStatusText = decisionLongReady or decisionShortReady ? "Triggered" :
-     decisionConflict ? "Stand Down" :
+// PR6 Entry Trigger Lock.
+// Confirmation can remain visible, but only the first valid trigger per active zone is allowed.
+bullEntryTriggerCandidate = decisionDirection == 1 and executionBullConfirmationSignal and not decisionConflict and (recentBullOBRetest or recentBullFVGRetest)
+bearEntryTriggerCandidate = decisionDirection == -1 and executionBearConfirmationSignal and not decisionConflict and (recentBearOBRetest or recentBearFVGRetest)
+
+var int lastBullEntryTriggerBar = na
+var int lastBearEntryTriggerBar = na
+var int lastBullEntryTriggerZoneBar = na
+var int lastBearEntryTriggerZoneBar = na
+var string lastEntryTriggerSide = "None"
+
+bullEntryTriggerZoneOpen = not entryTriggerLockEnabled or na(activeZoneCreatedBar) or na(lastBullEntryTriggerZoneBar) or lastBullEntryTriggerZoneBar != activeZoneCreatedBar
+bearEntryTriggerZoneOpen = not entryTriggerLockEnabled or na(activeZoneCreatedBar) or na(lastBearEntryTriggerZoneBar) or lastBearEntryTriggerZoneBar != activeZoneCreatedBar
+
+executionBullEntryTriggerSignal = bullEntryTriggerCandidate and bullEntryTriggerZoneOpen
+executionBearEntryTriggerSignal = bearEntryTriggerCandidate and bearEntryTriggerZoneOpen
+
+if executionBullEntryTriggerSignal
+    lastBullEntryTriggerBar := bar_index
+    lastBullEntryTriggerZoneBar := activeZoneCreatedBar
+    lastEntryTriggerSide := "Long"
+
+if executionBearEntryTriggerSignal
+    lastBearEntryTriggerBar := bar_index
+    lastBearEntryTriggerZoneBar := activeZoneCreatedBar
+    lastEntryTriggerSide := "Short"
+
+bullCurrentZoneLocked = entryTriggerLockEnabled and not na(activeZoneCreatedBar) and not na(lastBullEntryTriggerZoneBar) and lastBullEntryTriggerZoneBar == activeZoneCreatedBar
+bearCurrentZoneLocked = entryTriggerLockEnabled and not na(activeZoneCreatedBar) and not na(lastBearEntryTriggerZoneBar) and lastBearEntryTriggerZoneBar == activeZoneCreatedBar
+
+executionCurrentZoneLocked = decisionDirection == 1 ? bullCurrentZoneLocked :
+     decisionDirection == -1 ? bearCurrentZoneLocked :
+     bullCurrentZoneLocked or bearCurrentZoneLocked
+
+executionTriggerActive = executionBullEntryTriggerSignal or executionBearEntryTriggerSignal
+executionSetupForming = (executionDirectionalOBRetest or executionDirectionalFVGRetest) and not executionDirectionalConfirmation and not executionCurrentZoneLocked
+
+executionEntryLockText = executionTriggerActive ? "Entry Trigger Active" :
+     executionCurrentZoneLocked ? "Entry Used / Locked" :
+     executionDirectionalConfirmation ? "Confirmation Ready" :
+     executionSetupForming ? "Setup Forming" : "Waiting"
+
+executionStatusText = decisionConflict ? "Stand Down" :
+     executionTriggerActive ? "Entry Trigger" :
+     executionCurrentZoneLocked ? "Entry Used" :
+     decisionLongReady or decisionShortReady ? "Triggered" :
      executionDirectionalConfirmation ? "Confirmation" :
      executionDirectionalOBRetest or executionDirectionalFVGRetest ? "Retesting" :
      decisionDirection == 1 or decisionDirection == -1 ? "Preparing" : "Not Ready"
 
-executionEntryPermissionText = decisionLongReady ? "Long Trigger" :
-     decisionShortReady ? "Short Trigger" :
-     executionDirectionalConfirmation ? "Confirmation Ready" : "Wait"
+executionEntryPermissionText = executionBullEntryTriggerSignal ? "Long Trigger" :
+     executionBearEntryTriggerSignal ? "Short Trigger" :
+     executionCurrentZoneLocked ? "Entry Used / Locked" :
+     executionDirectionalConfirmation ? "Confirmation Ready" :
+     executionSetupForming ? "Setup Forming" : "Wait"
+
+executionStatusValue = executionStatusText == "Triggered" ? 6 :
+     executionStatusText == "Entry Trigger" ? 5 :
+     executionStatusText == "Entry Used" ? 4 :
+     executionStatusText == "Confirmation" ? 3 :
+     executionStatusText == "Retesting" ? 2 :
+     executionStatusText == "Preparing" ? 1 : 0
+
+executionEntryPermissionValue = executionEntryPermissionText == "Long Trigger" ? 2 :
+     executionEntryPermissionText == "Short Trigger" ? -2 :
+     executionEntryPermissionText == "Confirmation Ready" ? 1 :
+     executionEntryPermissionText == "Entry Used / Locked" ? 0.5 : 0
 
 plot(showExecutionDebug ? (executionDirectionalOBRetest ? 1 : 0) : na, "Execution OB Retest", display = display.data_window)
 plot(showExecutionDebug ? (executionDirectionalFVGRetest ? 1 : 0) : na, "Execution FVG Retest", display = display.data_window)
 plot(showExecutionDebug ? (executionDirectionalConfirmation ? 1 : 0) : na, "Execution Confirmation", display = display.data_window)
-plot(showExecutionDebug ? (executionStatusText == "Triggered" ? 4 : executionStatusText == "Confirmation" ? 3 : executionStatusText == "Retesting" ? 2 : executionStatusText == "Preparing" ? 1 : 0) : na, "Execution Status Value", display = display.data_window)
-plot(showExecutionDebug ? (executionEntryPermissionText == "Long Trigger" ? 2 : executionEntryPermissionText == "Short Trigger" ? -2 : executionEntryPermissionText == "Confirmation Ready" ? 1 : 0) : na, "Execution Entry Permission", display = display.data_window)
+plot(showExecutionDebug ? executionStatusValue : na, "Execution Status Value", display = display.data_window)
+plot(showExecutionDebug ? executionEntryPermissionValue : na, "Execution Entry Permission", display = display.data_window)
+plot(showExecutionDebug ? (executionBullEntryTriggerSignal ? 1 : executionBearEntryTriggerSignal ? -1 : 0) : na, "Execution Entry Trigger Signal", display = display.data_window)
+plot(showExecutionDebug ? (executionCurrentZoneLocked ? 1 : 0) : na, "Execution Entry Zone Locked", display = display.data_window)
 
 // PR8 visual de-duplication.
 // Execution states still update normally; only repeated chart markers are filtered.
@@ -1509,6 +1582,13 @@ plotshape(showExecutionConfirmationMarkers and visualMode != "Minimal" and label
 plotshape(showExecutionConfirmationMarkers and visualMode != "Minimal" and labelModeShort and executionBearConfirmationMarkerSignal, "Bearish execution confirmation marker CNF", shape.labeldown, location.abovebar, bearColor, size = size.tiny, text = "CNF", textcolor = color.white)
 plotshape(showExecutionConfirmationMarkers and visualMode != "Minimal" and labelModeMinimal and executionBullConfirmationMarkerSignal, "Bullish execution confirmation marker C", shape.labelup, location.belowbar, bullColor, size = size.tiny, text = "C", textcolor = color.white)
 plotshape(showExecutionConfirmationMarkers and visualMode != "Minimal" and labelModeMinimal and executionBearConfirmationMarkerSignal, "Bearish execution confirmation marker C", shape.labeldown, location.abovebar, bearColor, size = size.tiny, text = "C", textcolor = color.white)
+
+plotshape(showExecutionEntryTriggerMarkers and visualMode != "Minimal" and labelModeFull and executionBullEntryTriggerSignal, "Bullish execution entry trigger marker TRIGGER", shape.diamond, location.belowbar, bullColor, size = size.small, text = "TRIGGER", textcolor = color.white)
+plotshape(showExecutionEntryTriggerMarkers and visualMode != "Minimal" and labelModeFull and executionBearEntryTriggerSignal, "Bearish execution entry trigger marker TRIGGER", shape.diamond, location.abovebar, bearColor, size = size.small, text = "TRIGGER", textcolor = color.white)
+plotshape(showExecutionEntryTriggerMarkers and visualMode != "Minimal" and labelModeShort and executionBullEntryTriggerSignal, "Bullish execution entry trigger marker TRG", shape.diamond, location.belowbar, bullColor, size = size.tiny, text = "TRG", textcolor = color.white)
+plotshape(showExecutionEntryTriggerMarkers and visualMode != "Minimal" and labelModeShort and executionBearEntryTriggerSignal, "Bearish execution entry trigger marker TRG", shape.diamond, location.abovebar, bearColor, size = size.tiny, text = "TRG", textcolor = color.white)
+plotshape(showExecutionEntryTriggerMarkers and visualMode != "Minimal" and labelModeMinimal and executionBullEntryTriggerSignal, "Bullish execution entry trigger marker T", shape.diamond, location.belowbar, bullColor, size = size.tiny, text = "T", textcolor = color.white)
+plotshape(showExecutionEntryTriggerMarkers and visualMode != "Minimal" and labelModeMinimal and executionBearEntryTriggerSignal, "Bearish execution entry trigger marker T", shape.diamond, location.abovebar, bearColor, size = size.tiny, text = "T", textcolor = color.white)
 
 //=============================================================================
 // 13. TRADE PLAN
@@ -1658,7 +1738,7 @@ if barstate.islast
 
         if isMorningBrief
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 READ PR9", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 EXEC PR6", text_color = color.white, bgcolor = panelColor, text_size = size.small)
             table.cell(dash, 0, 1, "MORNING BRIEF", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 1, "", bgcolor = color.new(color.black, 0))
 
@@ -1691,7 +1771,7 @@ if barstate.islast
 
         else if isExecutionFocus
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 READ PR9", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 EXEC PR6", text_color = color.white, bgcolor = panelColor, text_size = size.small)
             table.cell(dash, 0, 1, "EXECUTION FOCUS", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 1, lastDecision, text_color = decisionColor, bgcolor = color.new(color.black, 0), text_size = size.large)
 
@@ -1711,7 +1791,7 @@ if barstate.islast
             table.cell(dash, 1, 6, executionRetestText, text_color = executionRetestText == "No Retest" ? neutralColor : marketDirectionColor, bgcolor = panelColor)
 
             table.cell(dash, 0, 7, "Execution", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 7, executionStatusText + " / " + executionConfirmationText, text_color = executionStatusText == "Triggered" ? bullColor : executionStatusText == "Stand Down" ? bearColor : neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 7, executionStatusText + " / " + executionEntryLockText, text_color = executionStatusText == "Triggered" ? bullColor : executionStatusText == "Stand Down" ? bearColor : neutralColor, bgcolor = panelColor)
 
             table.cell(dash, 0, 8, "Entry Permission", text_color = neutralColor, bgcolor = panelColor)
             table.cell(dash, 1, 8, executionEntryPermissionText, text_color = executionEntryPermissionColor, bgcolor = panelColor)
@@ -1730,7 +1810,7 @@ if barstate.islast
 
         else if isTradeManagement
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 READ PR9", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 EXEC PR6", text_color = color.white, bgcolor = panelColor, text_size = size.small)
             table.cell(dash, 0, 1, "TRADE MANAGEMENT", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 1, lastPlanDirection, text_color = lastPlanDirection == "LONG" ? bullColor : lastPlanDirection == "SHORT" ? bearColor : neutralColor, bgcolor = color.new(color.black, 0), text_size = size.large)
 
@@ -1757,7 +1837,7 @@ if barstate.islast
 
         else if isFull
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 READ PR9", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 EXEC PR6", text_color = color.white, bgcolor = panelColor, text_size = size.small)
 
             table.cell(dash, 0, 1, "FULL DASHBOARD", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 1, "", bgcolor = color.new(color.black, 0))
@@ -1775,7 +1855,7 @@ if barstate.islast
             table.cell(dash, 1, 5, executionRetestText, text_color = executionRetestText == "No Retest" ? neutralColor : marketDirectionColor, bgcolor = panelColor)
 
             table.cell(dash, 0, 6, "Execution", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 6, executionStatusText + " / " + executionConfirmationText, text_color = executionStatusText == "Triggered" ? bullColor : executionStatusText == "Stand Down" ? bearColor : neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 6, executionStatusText + " / " + executionEntryLockText, text_color = executionStatusText == "Triggered" ? bullColor : executionStatusText == "Stand Down" ? bearColor : neutralColor, bgcolor = panelColor)
 
             table.cell(dash, 0, 7, "Entry Permission", text_color = neutralColor, bgcolor = panelColor)
             table.cell(dash, 1, 7, executionEntryPermissionText, text_color = executionEntryPermissionColor, bgcolor = panelColor)
@@ -1801,3 +1881,5 @@ alertcondition(bullStructureEvent and bullInstitutionalOB, "ICE Genesis: Bullish
 alertcondition(bearStructureEvent and bearInstitutionalOB, "ICE Genesis: Bearish institutional OB", "ICE Genesis validated a bearish institutional order block on {{ticker}} {{interval}}.")
 alertcondition(decisionLongSignal, "ICE Genesis: Decision BUY", "ICE Genesis Decision Engine confirmed a BUY setup on {{ticker}} {{interval}}.")
 alertcondition(decisionShortSignal, "ICE Genesis: Decision SELL", "ICE Genesis Decision Engine confirmed a SELL setup on {{ticker}} {{interval}}.")
+alertcondition(executionBullEntryTriggerSignal, "ICE Genesis: Bullish entry trigger", "ICE Genesis Execution Engine confirmed a bullish entry trigger on {{ticker}} {{interval}}.")
+alertcondition(executionBearEntryTriggerSignal, "ICE Genesis: Bearish entry trigger", "ICE Genesis Execution Engine confirmed a bearish entry trigger on {{ticker}} {{interval}}.")
