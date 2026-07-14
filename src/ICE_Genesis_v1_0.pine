@@ -1,6 +1,6 @@
 //@version=6
 indicator(
-     "ICE Genesis v1.0 - IFA PR8",
+     "ICE Genesis v1.0 - IFA PR9",
 shorttitle = "ICEGen",     overlay = true,
      max_labels_count = 250,
      max_lines_count = 200,
@@ -514,6 +514,12 @@ ifaRequireImbalanceForJudas = input.bool(
      group = groupIFA
 )
 
+ifaRequireJudasForPermission = input.bool(
+     false,
+     "Require Judas swing for IFA permission",
+     group = groupIFA
+)
+
 showSmartTradePanel = input.bool(true, "Show smart trade planner in dashboard", group = groupVisual)
 asiaSession = input.session("1900-0200", "Asia session", group = groupTime)
 londonSession = input.session("0200-0500", "London session", group = groupTime)
@@ -535,9 +541,9 @@ londonShade = color.new(color.rgb(35, 95, 180), 91)
 newYorkShade = color.new(color.rgb(130, 70, 170), 91)
 
 //=============================================================================
-// 2A. CHART READABILITY LABEL TEXT — PR9 / ZIG ZAG PR3 / IFA PR8
+// 2A. CHART READABILITY LABEL TEXT — PR9 / ZIG ZAG PR3 / IFA PR9
 // Centralized label text for Full / Short / Minimal chart display modes.
-// IFA PR8 preserves PR7 Judas swing detection and adds the institutional footprint summary.
+// IFA PR9 preserves PR8 footprint summary and adds the institutional footprint permission gate.
 //=============================================================================
 labelModeFull = chartLabelMode == "Full"
 labelModeShort = chartLabelMode == "Short"
@@ -1610,7 +1616,7 @@ zigZagDashboardText = not showZigZag ? "Off" :
 zigZagDashboardColor = not showZigZag ? neutralColor : zigZagTrendColor
 
 //=============================================================================
-// 11C. INSTITUTIONAL FOOTPRINT ALIGNMENT ENGINE — PR1 / PR2 / PR3 / PR5 / PR6 / PR7 / PR8
+// 11C. INSTITUTIONAL FOOTPRINT ALIGNMENT ENGINE — PR1 / PR2 / PR3 / PR5 / PR6 / PR7 / PR8 / PR9
 // PR1 adds a Zig Zag structure gate for BOS / CHoCH quality.
 // PR2 separates normal BOS / CHoCH events from institutional-quality structure
 // events by requiring the Zig Zag gate, liquidity context, displacement, and
@@ -1620,7 +1626,8 @@ zigZagDashboardColor = not showZigZag ? neutralColor : zigZagTrendColor
 // PR5 maps readable BOS / CHoCH lines from the previous Zig Zag swing to the new confirmed break swing.
 // PR6 adds liquidity void / imbalance alignment quality.
 // PR7 adds bullish / bearish Judas swing detection.
-// PR8 adds a final institutional footprint summary. BUY / SELL logic is not changed.
+// PR8 adds a final institutional footprint summary.
+// PR9 adds a footprint permission gate. BUY / SELL logic is not changed.
 //=============================================================================
 ifaBullZigZagGate = enableInstitutionalFootprintAlignment and showZigZag and
      (zigZagBullStructure or (ifaAllowTransitionStructure and zigZagTransitionStructure))
@@ -2138,6 +2145,65 @@ ifaFootprintSummaryColor = not enableInstitutionalFootprintAlignment ? neutralCo
      ifaBullFootprintStrong or ifaBullFootprintBuilding ? bullColor :
      ifaBearFootprintStrong or ifaBearFootprintBuilding ? bearColor :
      ifaMaxFootprintScore > 0 ? liqColor : neutralColor
+
+// IFA PR9 — Institutional Footprint Permission Gate.
+// This is a dashboard/state layer only. It does not change BUY / SELL logic.
+// Permission requires the full IFA stack to be aligned and the protected guard to remain intact.
+ifaBullStructureQualityFresh = ifaQualityFresh and ifaLastQualityDirection == 1 and str.contains(ifaLastQualityText, "Quality Bull")
+ifaBearStructureQualityFresh = ifaQualityFresh and ifaLastQualityDirection == -1 and str.contains(ifaLastQualityText, "Quality Bear")
+
+ifaBullImbalanceQualityFresh = ifaImbalanceQualityFresh and ifaLastImbalanceQualityDirection == 1 and str.contains(ifaLastImbalanceQualityText, "Quality Bull")
+ifaBearImbalanceQualityFresh = ifaImbalanceQualityFresh and ifaLastImbalanceQualityDirection == -1 and str.contains(ifaLastImbalanceQualityText, "Quality Bear")
+
+ifaBullOBQualityFresh = ifaOBQualityFresh and ifaLastOBQualityDirection == 1 and str.contains(ifaLastOBQualityText, "Quality Bull")
+ifaBearOBQualityFresh = ifaOBQualityFresh and ifaLastOBQualityDirection == -1 and str.contains(ifaLastOBQualityText, "Quality Bear")
+
+ifaBullJudasPermissionOK = not ifaRequireJudasForPermission or (ifaJudasFresh and ifaLastJudasDirection == 1 and str.contains(ifaLastJudasText, "Bull Judas"))
+ifaBearJudasPermissionOK = not ifaRequireJudasForPermission or (ifaJudasFresh and ifaLastJudasDirection == -1 and str.contains(ifaLastJudasText, "Bear Judas"))
+
+ifaBullPermissionProtectedGuard = not sniperBullSetupInvalidated and not sniperBullProtectedLowSweptNow
+ifaBearPermissionProtectedGuard = not sniperBearSetupInvalidated and not sniperBearProtectedHighSweptNow
+
+ifaBullPermissionStackReady = ifaBullZigZagGate and ifaBullStructureQualityFresh and ifaBullImbalanceQualityFresh and ifaBullOBQualityFresh
+ifaBearPermissionStackReady = ifaBearZigZagGate and ifaBearStructureQualityFresh and ifaBearImbalanceQualityFresh and ifaBearOBQualityFresh
+
+institutionalBullFootprintPermission = enableInstitutionalFootprintAlignment and ifaBullPermissionStackReady and
+     ifaBullJudasPermissionOK and ifaBullPermissionProtectedGuard
+
+institutionalBearFootprintPermission = enableInstitutionalFootprintAlignment and ifaBearPermissionStackReady and
+     ifaBearJudasPermissionOK and ifaBearPermissionProtectedGuard
+
+institutionalFootprintPermission = institutionalBullFootprintPermission or institutionalBearFootprintPermission
+institutionalFootprintPermissionDirection = institutionalBullFootprintPermission ? 1 : institutionalBearFootprintPermission ? -1 : 0
+
+ifaBullPermissionMissingText = not ifaBullZigZagGate ? "Need Bull ZZ Gate" :
+     not ifaBullStructureQualityFresh ? "Need Bull Structure Quality" :
+     not ifaBullImbalanceQualityFresh ? "Need Bull Imbalance Quality" :
+     not ifaBullOBQualityFresh ? "Need Bull OB Quality" :
+     not ifaBullJudasPermissionOK ? "Need Bull Judas" :
+     not ifaBullPermissionProtectedGuard ? "Bull PL swept / reset" : "Bull Permission Ready"
+
+ifaBearPermissionMissingText = not ifaBearZigZagGate ? "Need Bear ZZ Gate" :
+     not ifaBearStructureQualityFresh ? "Need Bear Structure Quality" :
+     not ifaBearImbalanceQualityFresh ? "Need Bear Imbalance Quality" :
+     not ifaBearOBQualityFresh ? "Need Bear OB Quality" :
+     not ifaBearJudasPermissionOK ? "Need Bear Judas" :
+     not ifaBearPermissionProtectedGuard ? "Bear PH swept / reset" : "Bear Permission Ready"
+
+ifaPermissionDashboardText = not enableInstitutionalFootprintAlignment ? "Off" :
+     institutionalBullFootprintPermission ? "Bull Permission ✓" :
+     institutionalBearFootprintPermission ? "Bear Permission ✓" :
+     orderFlow == 1 ? ifaBullPermissionMissingText :
+     orderFlow == -1 ? ifaBearPermissionMissingText :
+     ifaMaxFootprintScore > 0 ? "No Trade — Footprint Incomplete" : "No Trade — No Footprint"
+
+ifaPermissionDashboardColor = not enableInstitutionalFootprintAlignment ? neutralColor :
+     institutionalBullFootprintPermission ? bullColor :
+     institutionalBearFootprintPermission ? bearColor :
+     str.contains(ifaPermissionDashboardText, "Bull") and not str.contains(ifaPermissionDashboardText, "Need") ? bullColor :
+     str.contains(ifaPermissionDashboardText, "Bear") and not str.contains(ifaPermissionDashboardText, "Need") ? bearColor :
+     str.contains(ifaPermissionDashboardText, "swept") ? bearColor :
+     str.contains(ifaPermissionDashboardText, "Need") ? liqColor : neutralColor
 
 //=============================================================================
 // 12. HIGHLIGHTED ORDER-BLOCK / FVG ZONES
@@ -3177,7 +3243,7 @@ if barstate.islast
 
         if isMorningBrief
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 IFA PR8", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 IFA PR9", text_color = color.white, bgcolor = panelColor, text_size = size.small)
             table.cell(dash, 0, 1, "MORNING BRIEF", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 1, "", bgcolor = color.new(color.black, 0))
 
@@ -3210,7 +3276,7 @@ if barstate.islast
 
         else if isExecutionFocus
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 IFA PR8", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 IFA PR9", text_color = color.white, bgcolor = panelColor, text_size = size.small)
             table.cell(dash, 0, 1, "EXECUTION FOCUS", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 1, lastDecision, text_color = decisionColor, bgcolor = color.new(color.black, 0), text_size = size.large)
 
@@ -3277,9 +3343,12 @@ if barstate.islast
             table.cell(dash, 0, 22, "IFA Summary", text_color = neutralColor, bgcolor = panelColor)
             table.cell(dash, 1, 22, ifaFootprintSummaryText, text_color = ifaFootprintSummaryColor, bgcolor = panelColor, text_size = size.tiny)
 
+            table.cell(dash, 0, 23, "IFA Permission", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 23, ifaPermissionDashboardText, text_color = ifaPermissionDashboardColor, bgcolor = panelColor, text_size = size.tiny)
+
         else if isTradeManagement
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 IFA PR8", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 IFA PR9", text_color = color.white, bgcolor = panelColor, text_size = size.small)
             table.cell(dash, 0, 1, "TRADE MANAGEMENT", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 1, lastPlanDirection, text_color = lastPlanDirection == "LONG" ? bullColor : lastPlanDirection == "SHORT" ? bearColor : neutralColor, bgcolor = color.new(color.black, 0), text_size = size.large)
 
@@ -3306,7 +3375,7 @@ if barstate.islast
 
         else if isFull
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 IFA PR8", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 IFA PR9", text_color = color.white, bgcolor = panelColor, text_size = size.small)
 
             table.cell(dash, 0, 1, "FULL DASHBOARD", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 1, "", bgcolor = color.new(color.black, 0))
@@ -3364,6 +3433,9 @@ if barstate.islast
 
             table.cell(dash, 0, 19, "IFA Summary", text_color = neutralColor, bgcolor = panelColor)
             table.cell(dash, 1, 19, ifaFootprintSummaryText, text_color = ifaFootprintSummaryColor, bgcolor = panelColor, text_size = size.tiny)
+
+            table.cell(dash, 0, 20, "IFA Permission", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 20, ifaPermissionDashboardText, text_color = ifaPermissionDashboardColor, bgcolor = panelColor, text_size = size.tiny)
 
 //=============================================================================
 // 16. ALERTS
