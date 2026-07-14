@@ -1,6 +1,6 @@
 //@version=6
 indicator(
-     "ICE Genesis v1.0 - IFA PR1",
+     "ICE Genesis v1.0 - IFA PR2",
 shorttitle = "ICEGen",     overlay = true,
      max_labels_count = 250,
      max_lines_count = 200,
@@ -420,6 +420,24 @@ ifaAlignmentMemoryBars = input.int(
      group = groupIFA
 )
 
+ifaRequireLiquidityForQuality = input.bool(
+     true,
+     "Require liquidity sweep for IFA quality",
+     group = groupIFA
+)
+
+ifaRequireDisplacementForQuality = input.bool(
+     true,
+     "Require displacement for IFA quality",
+     group = groupIFA
+)
+
+ifaRequireImbalanceForQuality = input.bool(
+     true,
+     "Require FVG / imbalance for IFA quality",
+     group = groupIFA
+)
+
 showSmartTradePanel = input.bool(true, "Show smart trade planner in dashboard", group = groupVisual)
 asiaSession = input.session("1900-0200", "Asia session", group = groupTime)
 londonSession = input.session("0200-0500", "London session", group = groupTime)
@@ -441,9 +459,9 @@ londonShade = color.new(color.rgb(35, 95, 180), 91)
 newYorkShade = color.new(color.rgb(130, 70, 170), 91)
 
 //=============================================================================
-// 2A. CHART READABILITY LABEL TEXT — PR9 / ZIG ZAG PR3 / IFA PR1
+// 2A. CHART READABILITY LABEL TEXT — PR9 / ZIG ZAG PR3 / IFA PR2
 // Centralized label text for Full / Short / Minimal chart display modes.
-// IFA PR1 preserves Zig Zag PR3 and adds an institutional structure-quality gate.
+// IFA PR2 preserves Zig Zag PR3 and adds institutional BOS / CHoCH quality filtering.
 //=============================================================================
 labelModeFull = chartLabelMode == "Full"
 labelModeShort = chartLabelMode == "Short"
@@ -1402,10 +1420,11 @@ zigZagDashboardText = not showZigZag ? "Off" :
 zigZagDashboardColor = not showZigZag ? neutralColor : zigZagTrendColor
 
 //=============================================================================
-// 11B. INSTITUTIONAL FOOTPRINT ALIGNMENT ENGINE — PR1
-// Adds a Zig Zag structure gate for BOS / CHoCH quality without changing BUY / SELL logic.
-// Bullish BOS / CHoCH is institutional quality only inside Bullish Structure or allowed Transition.
-// Bearish BOS / CHoCH is institutional quality only inside Bearish Structure or allowed Transition.
+// 11B. INSTITUTIONAL FOOTPRINT ALIGNMENT ENGINE — PR1 / PR2
+// PR1 adds a Zig Zag structure gate for BOS / CHoCH quality.
+// PR2 separates normal BOS / CHoCH events from institutional-quality structure
+// events by requiring the Zig Zag gate, liquidity context, displacement, and
+// imbalance / FVG footprint. BUY / SELL logic is not changed.
 //=============================================================================
 ifaBullZigZagGate = enableInstitutionalFootprintAlignment and showZigZag and
      (zigZagBullStructure or (ifaAllowTransitionStructure and zigZagTransitionStructure))
@@ -1419,10 +1438,42 @@ ifaBearStructureAlignedNow = enableInstitutionalFootprintAlignment and bearStruc
 ifaBullStructureRejectedNow = enableInstitutionalFootprintAlignment and bullStructureEvent and not ifaBullZigZagGate
 ifaBearStructureRejectedNow = enableInstitutionalFootprintAlignment and bearStructureEvent and not ifaBearZigZagGate
 
+ifaBullLiquidityContext = not ifaRequireLiquidityForQuality or recentSSLSweep
+ifaBearLiquidityContext = not ifaRequireLiquidityForQuality or recentBSLSweep
+
+ifaBullDisplacementContext = not ifaRequireDisplacementForQuality or bullDisplacement or recentBullDisplacement
+ifaBearDisplacementContext = not ifaRequireDisplacementForQuality or bearDisplacement or recentBearDisplacement
+
+ifaBullImbalanceContext = not ifaRequireImbalanceForQuality or bullFVGOK
+ifaBearImbalanceContext = not ifaRequireImbalanceForQuality or bearFVGOK
+
+ifaBullBOSNow = internalBullBOS or externalBullBOS
+ifaBearBOSNow = internalBearBOS or externalBearBOS
+ifaBullCHoCHNow = internalBullCHoCH or externalBullCHoCH
+ifaBearCHoCHNow = internalBearCHoCH or externalBearCHoCH
+
+ifaBullQualityReady = ifaBullZigZagGate and ifaBullLiquidityContext and ifaBullDisplacementContext and ifaBullImbalanceContext
+ifaBearQualityReady = ifaBearZigZagGate and ifaBearLiquidityContext and ifaBearDisplacementContext and ifaBearImbalanceContext
+
+institutionalBullBOSQuality = enableInstitutionalFootprintAlignment and ifaBullBOSNow and ifaBullQualityReady
+institutionalBearBOSQuality = enableInstitutionalFootprintAlignment and ifaBearBOSNow and ifaBearQualityReady
+institutionalBullCHoCHQuality = enableInstitutionalFootprintAlignment and ifaBullCHoCHNow and ifaBullQualityReady
+institutionalBearCHoCHQuality = enableInstitutionalFootprintAlignment and ifaBearCHoCHNow and ifaBearQualityReady
+
 // Stable aliases for future footprint PRs. These are intentionally not wired into BUY / SELL logic yet.
-institutionalBullStructureQuality = ifaBullStructureAlignedNow
-institutionalBearStructureQuality = ifaBearStructureAlignedNow
+institutionalBullStructureQuality = institutionalBullBOSQuality or institutionalBullCHoCHQuality
+institutionalBearStructureQuality = institutionalBearBOSQuality or institutionalBearCHoCHQuality
 institutionalStructureQuality = institutionalBullStructureQuality or institutionalBearStructureQuality
+
+ifaBullMissingText = not ifaBullZigZagGate ? "Need Bull ZZ Gate" :
+     not ifaBullLiquidityContext ? "Need SSL Sweep" :
+     not ifaBullDisplacementContext ? "Need Bull Displacement" :
+     not ifaBullImbalanceContext ? "Need Bull FVG" : "Bull Quality Ready"
+
+ifaBearMissingText = not ifaBearZigZagGate ? "Need Bear ZZ Gate" :
+     not ifaBearLiquidityContext ? "Need BSL Sweep" :
+     not ifaBearDisplacementContext ? "Need Bear Displacement" :
+     not ifaBearImbalanceContext ? "Need Bear FVG" : "Bear Quality Ready"
 
 var int ifaLastAlignmentBar = na
 var int ifaLastAlignmentDirection = 0
@@ -1453,6 +1504,45 @@ else if ifaBearStructureRejectedNow
 ifaAlignmentFresh = enableInstitutionalFootprintAlignment and not na(ifaLastAlignmentBar) and
      bar_index - ifaLastAlignmentBar <= ifaAlignmentMemoryBars
 
+var int ifaLastQualityBar = na
+var int ifaLastQualityDirection = 0
+var string ifaLastQualityText = "Waiting"
+var color ifaLastQualityColor = neutralColor
+
+if institutionalBullBOSQuality
+    ifaLastQualityBar := bar_index
+    ifaLastQualityDirection := 1
+    ifaLastQualityText := "Quality Bull BOS ✓"
+    ifaLastQualityColor := bullColor
+else if institutionalBullCHoCHQuality
+    ifaLastQualityBar := bar_index
+    ifaLastQualityDirection := 1
+    ifaLastQualityText := "Quality Bull CHoCH ✓"
+    ifaLastQualityColor := bullColor
+else if institutionalBearBOSQuality
+    ifaLastQualityBar := bar_index
+    ifaLastQualityDirection := -1
+    ifaLastQualityText := "Quality Bear BOS ✓"
+    ifaLastQualityColor := bearColor
+else if institutionalBearCHoCHQuality
+    ifaLastQualityBar := bar_index
+    ifaLastQualityDirection := -1
+    ifaLastQualityText := "Quality Bear CHoCH ✓"
+    ifaLastQualityColor := bearColor
+else if enableInstitutionalFootprintAlignment and bullStructureEvent
+    ifaLastQualityBar := bar_index
+    ifaLastQualityDirection := 1
+    ifaLastQualityText := ifaBullMissingText
+    ifaLastQualityColor := liqColor
+else if enableInstitutionalFootprintAlignment and bearStructureEvent
+    ifaLastQualityBar := bar_index
+    ifaLastQualityDirection := -1
+    ifaLastQualityText := ifaBearMissingText
+    ifaLastQualityColor := liqColor
+
+ifaQualityFresh = enableInstitutionalFootprintAlignment and not na(ifaLastQualityBar) and
+     bar_index - ifaLastQualityBar <= ifaAlignmentMemoryBars
+
 ifaDashboardText = not enableInstitutionalFootprintAlignment ? "Off" :
      not showZigZag ? "Need Zig Zag" :
      ifaAlignmentFresh ? ifaLastAlignmentText :
@@ -1464,6 +1554,19 @@ ifaDashboardColor = not enableInstitutionalFootprintAlignment ? neutralColor :
      zigZagBullStructure ? bullColor :
      zigZagBearStructure ? bearColor :
      zigZagTransitionStructure ? liqColor : neutralColor
+
+ifaQualityDashboardText = not enableInstitutionalFootprintAlignment ? "Off" :
+     ifaQualityFresh ? ifaLastQualityText :
+     orderFlow == 1 ? ifaBullMissingText :
+     orderFlow == -1 ? ifaBearMissingText :
+     "Waiting for structure"
+
+ifaQualityDashboardColor = not enableInstitutionalFootprintAlignment ? neutralColor :
+     ifaQualityFresh ? ifaLastQualityColor :
+     str.contains(ifaQualityDashboardText, "Bull Quality") ? bullColor :
+     str.contains(ifaQualityDashboardText, "Bear Quality") ? bearColor :
+     str.contains(ifaQualityDashboardText, "Quality") ? bullColor :
+     str.contains(ifaQualityDashboardText, "Need") ? liqColor : neutralColor
 
 //=============================================================================
 // 12. HIGHLIGHTED ORDER-BLOCK / FVG ZONES
@@ -2503,7 +2606,7 @@ if barstate.islast
 
         if isMorningBrief
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 IFA PR1", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 IFA PR2", text_color = color.white, bgcolor = panelColor, text_size = size.small)
             table.cell(dash, 0, 1, "MORNING BRIEF", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 1, "", bgcolor = color.new(color.black, 0))
 
@@ -2536,7 +2639,7 @@ if barstate.islast
 
         else if isExecutionFocus
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 IFA PR1", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 IFA PR2", text_color = color.white, bgcolor = panelColor, text_size = size.small)
             table.cell(dash, 0, 1, "EXECUTION FOCUS", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 1, lastDecision, text_color = decisionColor, bgcolor = color.new(color.black, 0), text_size = size.large)
 
@@ -2555,42 +2658,45 @@ if barstate.islast
             table.cell(dash, 0, 6, "IFA Gate", text_color = neutralColor, bgcolor = panelColor)
             table.cell(dash, 1, 6, ifaDashboardText, text_color = ifaDashboardColor, bgcolor = panelColor, text_size = size.tiny)
 
-            table.cell(dash, 0, 7, "OB / FVG", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 7, (obActive ? zoneText : "OB ...") + " / " + (fvgActive ? fvgText : "FVG ..."), text_color = obActive ? (activeBullish ? bullColor : bearColor) : neutralColor, bgcolor = panelColor, text_size = size.tiny)
+            table.cell(dash, 0, 7, "IFA Quality", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 7, ifaQualityDashboardText, text_color = ifaQualityDashboardColor, bgcolor = panelColor, text_size = size.tiny)
 
-            table.cell(dash, 0, 8, "Retest", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 8, executionRetestText, text_color = executionRetestText == "No Retest" ? neutralColor : marketDirectionColor, bgcolor = panelColor)
+            table.cell(dash, 0, 8, "OB / FVG", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 8, (obActive ? zoneText : "OB ...") + " / " + (fvgActive ? fvgText : "FVG ..."), text_color = obActive ? (activeBullish ? bullColor : bearColor) : neutralColor, bgcolor = panelColor, text_size = size.tiny)
 
-            table.cell(dash, 0, 9, "Execution", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 9, executionStatusText + " / " + executionEntryLockText, text_color = executionStatusText == "Triggered" ? bullColor : executionStatusText == "Stand Down" ? bearColor : neutralColor, bgcolor = panelColor)
+            table.cell(dash, 0, 9, "Retest", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 9, executionRetestText, text_color = executionRetestText == "No Retest" ? neutralColor : marketDirectionColor, bgcolor = panelColor)
 
-            table.cell(dash, 0, 10, "Entry Permission", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 10, executionEntryPermissionText, text_color = executionEntryPermissionColor, bgcolor = panelColor)
+            table.cell(dash, 0, 10, "Execution", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 10, executionStatusText + " / " + executionEntryLockText, text_color = executionStatusText == "Triggered" ? bullColor : executionStatusText == "Stand Down" ? bearColor : neutralColor, bgcolor = panelColor)
 
-            table.cell(dash, 0, 11, "Protected Guard", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 11, sniperProtectedGuardText, text_color = sniperProtectedGuardColor, bgcolor = panelColor, text_size = size.tiny)
+            table.cell(dash, 0, 11, "Entry Permission", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 11, executionEntryPermissionText, text_color = executionEntryPermissionColor, bgcolor = panelColor)
 
-            table.cell(dash, 0, 12, "Sniper Sweep", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 12, sniperInternalSweepText, text_color = sniperInternalSweepColor, bgcolor = panelColor, text_size = size.tiny)
+            table.cell(dash, 0, 12, "Protected Guard", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 12, sniperProtectedGuardText, text_color = sniperProtectedGuardColor, bgcolor = panelColor, text_size = size.tiny)
 
-            table.cell(dash, 0, 13, "HTF Context", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 13, sniperHTFContextText, text_color = sniperHTFContextColor, bgcolor = panelColor, text_size = size.tiny)
+            table.cell(dash, 0, 13, "Sniper Sweep", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 13, sniperInternalSweepText, text_color = sniperInternalSweepColor, bgcolor = panelColor, text_size = size.tiny)
 
-            table.cell(dash, 0, 14, "OTE / HTF", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 14, (dashboardOTE ? "OTE OK" : "OTE ...") + " / " + biasText, text_color = dashboardOTE ? bullColor : neutralColor, bgcolor = panelColor, text_size = size.tiny)
+            table.cell(dash, 0, 14, "HTF Context", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 14, sniperHTFContextText, text_color = sniperHTFContextColor, bgcolor = panelColor, text_size = size.tiny)
 
-            table.cell(dash, 0, 15, "Objective", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 15, currentObjectiveText, text_color = marketDirectionColor, bgcolor = panelColor, text_size = size.tiny)
+            table.cell(dash, 0, 15, "OTE / HTF", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 15, (dashboardOTE ? "OTE OK" : "OTE ...") + " / " + biasText, text_color = dashboardOTE ? bullColor : neutralColor, bgcolor = panelColor, text_size = size.tiny)
 
-            table.cell(dash, 0, 16, "Next Event", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 16, expectedNextEventText, text_color = marketDirectionColor, bgcolor = panelColor, text_size = size.tiny)
+            table.cell(dash, 0, 16, "Objective", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 16, currentObjectiveText, text_color = marketDirectionColor, bgcolor = panelColor, text_size = size.tiny)
 
-            table.cell(dash, 0, 17, "Briefing", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 17, marketBriefingText, text_color = marketDirectionColor, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 0, 17, "Next Event", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 17, expectedNextEventText, text_color = marketDirectionColor, bgcolor = panelColor, text_size = size.tiny)
+
+            table.cell(dash, 0, 18, "Briefing", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 18, marketBriefingText, text_color = marketDirectionColor, bgcolor = panelColor, text_size = size.small)
 
         else if isTradeManagement
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 IFA PR1", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 IFA PR2", text_color = color.white, bgcolor = panelColor, text_size = size.small)
             table.cell(dash, 0, 1, "TRADE MANAGEMENT", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 1, lastPlanDirection, text_color = lastPlanDirection == "LONG" ? bullColor : lastPlanDirection == "SHORT" ? bearColor : neutralColor, bgcolor = color.new(color.black, 0), text_size = size.large)
 
@@ -2617,7 +2723,7 @@ if barstate.islast
 
         else if isFull
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 IFA PR1", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 IFA PR2", text_color = color.white, bgcolor = panelColor, text_size = size.small)
 
             table.cell(dash, 0, 1, "FULL DASHBOARD", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 1, "", bgcolor = color.new(color.black, 0))
@@ -2631,35 +2737,38 @@ if barstate.islast
             table.cell(dash, 0, 4, "IFA Gate", text_color = neutralColor, bgcolor = panelColor)
             table.cell(dash, 1, 4, ifaDashboardText, text_color = ifaDashboardColor, bgcolor = panelColor, text_size = size.tiny)
 
-            table.cell(dash, 0, 5, "Narrative", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 5, institutionalNarrativeText, text_color = marketDirectionColor, bgcolor = panelColor)
+            table.cell(dash, 0, 5, "IFA Quality", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 5, ifaQualityDashboardText, text_color = ifaQualityDashboardColor, bgcolor = panelColor, text_size = size.tiny)
 
-            table.cell(dash, 0, 6, "Decision", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 6, lastDecision, text_color = decisionColor, bgcolor = panelColor, text_size = size.large)
+            table.cell(dash, 0, 6, "Narrative", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 6, institutionalNarrativeText, text_color = marketDirectionColor, bgcolor = panelColor)
 
-            table.cell(dash, 0, 7, "Retest", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 7, executionRetestText, text_color = executionRetestText == "No Retest" ? neutralColor : marketDirectionColor, bgcolor = panelColor)
+            table.cell(dash, 0, 7, "Decision", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 7, lastDecision, text_color = decisionColor, bgcolor = panelColor, text_size = size.large)
 
-            table.cell(dash, 0, 8, "Execution", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 8, executionStatusText + " / " + executionEntryLockText, text_color = executionStatusText == "Triggered" ? bullColor : executionStatusText == "Stand Down" ? bearColor : neutralColor, bgcolor = panelColor)
+            table.cell(dash, 0, 8, "Retest", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 8, executionRetestText, text_color = executionRetestText == "No Retest" ? neutralColor : marketDirectionColor, bgcolor = panelColor)
 
-            table.cell(dash, 0, 9, "Entry Permission", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 9, executionEntryPermissionText, text_color = executionEntryPermissionColor, bgcolor = panelColor)
+            table.cell(dash, 0, 9, "Execution", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 9, executionStatusText + " / " + executionEntryLockText, text_color = executionStatusText == "Triggered" ? bullColor : executionStatusText == "Stand Down" ? bearColor : neutralColor, bgcolor = panelColor)
 
-            table.cell(dash, 0, 10, "Protected Guard", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 10, sniperProtectedGuardText, text_color = sniperProtectedGuardColor, bgcolor = panelColor, text_size = size.tiny)
+            table.cell(dash, 0, 10, "Entry Permission", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 10, executionEntryPermissionText, text_color = executionEntryPermissionColor, bgcolor = panelColor)
 
-            table.cell(dash, 0, 11, "Sniper Sweep", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 11, sniperInternalSweepText, text_color = sniperInternalSweepColor, bgcolor = panelColor, text_size = size.tiny)
+            table.cell(dash, 0, 11, "Protected Guard", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 11, sniperProtectedGuardText, text_color = sniperProtectedGuardColor, bgcolor = panelColor, text_size = size.tiny)
 
-            table.cell(dash, 0, 12, "HTF Context", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 12, sniperHTFContextText, text_color = sniperHTFContextColor, bgcolor = panelColor, text_size = size.tiny)
+            table.cell(dash, 0, 12, "Sniper Sweep", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 12, sniperInternalSweepText, text_color = sniperInternalSweepColor, bgcolor = panelColor, text_size = size.tiny)
 
-            table.cell(dash, 0, 13, "Objective", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 13, currentObjectiveText, text_color = marketDirectionColor, bgcolor = panelColor, text_size = size.tiny)
+            table.cell(dash, 0, 13, "HTF Context", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 13, sniperHTFContextText, text_color = sniperHTFContextColor, bgcolor = panelColor, text_size = size.tiny)
 
-            table.cell(dash, 0, 14, "Next Event", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 14, expectedNextEventText, text_color = marketDirectionColor, bgcolor = panelColor, text_size = size.tiny)
+            table.cell(dash, 0, 14, "Objective", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 14, currentObjectiveText, text_color = marketDirectionColor, bgcolor = panelColor, text_size = size.tiny)
+
+            table.cell(dash, 0, 15, "Next Event", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 15, expectedNextEventText, text_color = marketDirectionColor, bgcolor = panelColor, text_size = size.tiny)
 
 //=============================================================================
 // 16. ALERTS
