@@ -1,6 +1,6 @@
 //@version=6
 indicator(
-     "ICE Genesis v1.0 - Chart Readability PR7",
+     "ICE Genesis v1.0 - Chart Readability PR8",
 shorttitle = "ICEGen",     overlay = true,
      max_labels_count = 250,
      max_lines_count = 200,
@@ -123,6 +123,20 @@ showExecutionRetestMarkers = input.bool(
 showExecutionConfirmationMarkers = input.bool(
      true,
      "Show confirmation markers",
+     group = groupExecution
+)
+
+executionMarkerCooldownBars = input.int(
+     8,
+     "Execution marker cooldown bars",
+     minval = 0,
+     maxval = 100,
+     group = groupExecution
+)
+
+executionMarkersOncePerZone = input.bool(
+     true,
+     "Only show first execution marker per zone",
      group = groupExecution
 )
 
@@ -272,9 +286,9 @@ londonShade = color.new(color.rgb(35, 95, 180), 91)
 newYorkShade = color.new(color.rgb(130, 70, 170), 91)
 
 //=============================================================================
-// 2A. CHART READABILITY LABEL TEXT — PR7
+// 2A. CHART READABILITY LABEL TEXT — PR8
 // Centralized label text for Full / Short / Minimal chart display modes.
-// PR7 keeps liquidity / OB / FVG labels clean and wires structure labels into Chart Label Mode.
+// PR8 keeps chart labels clean and de-duplicates execution markers.
 //=============================================================================
 labelModeFull = chartLabelMode == "Full"
 labelModeShort = chartLabelMode == "Short"
@@ -1338,8 +1352,8 @@ marketBriefingText = decisionLongReady ? "BUY active. Manage plan. Avoid shorts.
      "No clean story. Wait."
 
 //=============================================================================
-// 13B. EXECUTION ENGINE — PR5
-// Tracks retests, confirmation candles, entry permission, retest markers, and confirmation markers without changing BUY / SELL logic.
+// 13B. EXECUTION ENGINE — PR8
+// Tracks retests, confirmation candles, entry permission, and de-duplicated visual markers without changing BUY / SELL logic.
 //=============================================================================
 executionZoneOverlap(float zoneTop, float zoneBottom) =>
     not na(zoneTop) and not na(zoneBottom) and high >= zoneBottom and low <= zoneTop
@@ -1436,17 +1450,64 @@ plot(showExecutionDebug ? (executionDirectionalConfirmation ? 1 : 0) : na, "Exec
 plot(showExecutionDebug ? (executionStatusText == "Triggered" ? 4 : executionStatusText == "Confirmation" ? 3 : executionStatusText == "Retesting" ? 2 : executionStatusText == "Preparing" ? 1 : 0) : na, "Execution Status Value", display = display.data_window)
 plot(showExecutionDebug ? (executionEntryPermissionText == "Long Trigger" ? 2 : executionEntryPermissionText == "Short Trigger" ? -2 : executionEntryPermissionText == "Confirmation Ready" ? 1 : 0) : na, "Execution Entry Permission", display = display.data_window)
 
-plotshape(showExecutionRetestMarkers and visualMode != "Minimal" and (labelModeFull or labelModeShort) and executionBullRetestSignal, "Bullish execution retest marker RT", shape.circle, location.belowbar, bullColor, size = size.tiny, text = "RT", textcolor = color.white)
-plotshape(showExecutionRetestMarkers and visualMode != "Minimal" and (labelModeFull or labelModeShort) and executionBearRetestSignal, "Bearish execution retest marker RT", shape.circle, location.abovebar, bearColor, size = size.tiny, text = "RT", textcolor = color.white)
-plotshape(showExecutionRetestMarkers and visualMode != "Minimal" and labelModeMinimal and executionBullRetestSignal, "Bullish execution retest marker R", shape.circle, location.belowbar, bullColor, size = size.tiny, text = "R", textcolor = color.white)
-plotshape(showExecutionRetestMarkers and visualMode != "Minimal" and labelModeMinimal and executionBearRetestSignal, "Bearish execution retest marker R", shape.circle, location.abovebar, bearColor, size = size.tiny, text = "R", textcolor = color.white)
+// PR8 visual de-duplication.
+// Execution states still update normally; only repeated chart markers are filtered.
+var int lastBullRetestMarkerBar = na
+var int lastBearRetestMarkerBar = na
+var int lastBullConfirmationMarkerBar = na
+var int lastBearConfirmationMarkerBar = na
+var int lastBullRetestMarkerZoneBar = na
+var int lastBearRetestMarkerZoneBar = na
+var int lastBullConfirmationMarkerZoneBar = na
+var int lastBearConfirmationMarkerZoneBar = na
 
-plotshape(showExecutionConfirmationMarkers and visualMode != "Minimal" and labelModeFull and executionBullConfirmationSignal, "Bullish execution confirmation marker CONF", shape.labelup, location.belowbar, bullColor, size = size.tiny, text = "CONF", textcolor = color.white)
-plotshape(showExecutionConfirmationMarkers and visualMode != "Minimal" and labelModeFull and executionBearConfirmationSignal, "Bearish execution confirmation marker CONF", shape.labeldown, location.abovebar, bearColor, size = size.tiny, text = "CONF", textcolor = color.white)
-plotshape(showExecutionConfirmationMarkers and visualMode != "Minimal" and labelModeShort and executionBullConfirmationSignal, "Bullish execution confirmation marker CNF", shape.labelup, location.belowbar, bullColor, size = size.tiny, text = "CNF", textcolor = color.white)
-plotshape(showExecutionConfirmationMarkers and visualMode != "Minimal" and labelModeShort and executionBearConfirmationSignal, "Bearish execution confirmation marker CNF", shape.labeldown, location.abovebar, bearColor, size = size.tiny, text = "CNF", textcolor = color.white)
-plotshape(showExecutionConfirmationMarkers and visualMode != "Minimal" and labelModeMinimal and executionBullConfirmationSignal, "Bullish execution confirmation marker C", shape.labelup, location.belowbar, bullColor, size = size.tiny, text = "C", textcolor = color.white)
-plotshape(showExecutionConfirmationMarkers and visualMode != "Minimal" and labelModeMinimal and executionBearConfirmationSignal, "Bearish execution confirmation marker C", shape.labeldown, location.abovebar, bearColor, size = size.tiny, text = "C", textcolor = color.white)
+bullRetestMarkerCooldownOK = na(lastBullRetestMarkerBar) or bar_index - lastBullRetestMarkerBar > executionMarkerCooldownBars
+bearRetestMarkerCooldownOK = na(lastBearRetestMarkerBar) or bar_index - lastBearRetestMarkerBar > executionMarkerCooldownBars
+bullConfirmationMarkerCooldownOK = na(lastBullConfirmationMarkerBar) or bar_index - lastBullConfirmationMarkerBar > executionMarkerCooldownBars
+bearConfirmationMarkerCooldownOK = na(lastBearConfirmationMarkerBar) or bar_index - lastBearConfirmationMarkerBar > executionMarkerCooldownBars
+
+bullRetestMarkerZoneOK = not executionMarkersOncePerZone or na(activeZoneCreatedBar) or na(lastBullRetestMarkerZoneBar) or lastBullRetestMarkerZoneBar != activeZoneCreatedBar
+bearRetestMarkerZoneOK = not executionMarkersOncePerZone or na(activeZoneCreatedBar) or na(lastBearRetestMarkerZoneBar) or lastBearRetestMarkerZoneBar != activeZoneCreatedBar
+bullConfirmationMarkerZoneOK = not executionMarkersOncePerZone or na(activeZoneCreatedBar) or na(lastBullConfirmationMarkerZoneBar) or lastBullConfirmationMarkerZoneBar != activeZoneCreatedBar
+bearConfirmationMarkerZoneOK = not executionMarkersOncePerZone or na(activeZoneCreatedBar) or na(lastBearConfirmationMarkerZoneBar) or lastBearConfirmationMarkerZoneBar != activeZoneCreatedBar
+
+executionBullRetestMarkerSignal = executionBullRetestSignal and bullRetestMarkerCooldownOK and bullRetestMarkerZoneOK
+executionBearRetestMarkerSignal = executionBearRetestSignal and bearRetestMarkerCooldownOK and bearRetestMarkerZoneOK
+executionBullConfirmationMarkerSignal = executionBullConfirmationSignal and bullConfirmationMarkerCooldownOK and bullConfirmationMarkerZoneOK
+executionBearConfirmationMarkerSignal = executionBearConfirmationSignal and bearConfirmationMarkerCooldownOK and bearConfirmationMarkerZoneOK
+
+if executionBullRetestMarkerSignal
+    lastBullRetestMarkerBar := bar_index
+    lastBullRetestMarkerZoneBar := activeZoneCreatedBar
+
+if executionBearRetestMarkerSignal
+    lastBearRetestMarkerBar := bar_index
+    lastBearRetestMarkerZoneBar := activeZoneCreatedBar
+
+if executionBullConfirmationMarkerSignal
+    lastBullConfirmationMarkerBar := bar_index
+    lastBullConfirmationMarkerZoneBar := activeZoneCreatedBar
+
+if executionBearConfirmationMarkerSignal
+    lastBearConfirmationMarkerBar := bar_index
+    lastBearConfirmationMarkerZoneBar := activeZoneCreatedBar
+
+plot(showExecutionDebug ? (executionBullRetestMarkerSignal ? 1 : 0) : na, "Bullish execution retest marker allowed", display = display.data_window)
+plot(showExecutionDebug ? (executionBearRetestMarkerSignal ? 1 : 0) : na, "Bearish execution retest marker allowed", display = display.data_window)
+plot(showExecutionDebug ? (executionBullConfirmationMarkerSignal ? 1 : 0) : na, "Bullish execution confirmation marker allowed", display = display.data_window)
+plot(showExecutionDebug ? (executionBearConfirmationMarkerSignal ? 1 : 0) : na, "Bearish execution confirmation marker allowed", display = display.data_window)
+
+plotshape(showExecutionRetestMarkers and visualMode != "Minimal" and (labelModeFull or labelModeShort) and executionBullRetestMarkerSignal, "Bullish execution retest marker RT", shape.circle, location.belowbar, bullColor, size = size.tiny, text = "RT", textcolor = color.white)
+plotshape(showExecutionRetestMarkers and visualMode != "Minimal" and (labelModeFull or labelModeShort) and executionBearRetestMarkerSignal, "Bearish execution retest marker RT", shape.circle, location.abovebar, bearColor, size = size.tiny, text = "RT", textcolor = color.white)
+plotshape(showExecutionRetestMarkers and visualMode != "Minimal" and labelModeMinimal and executionBullRetestMarkerSignal, "Bullish execution retest marker R", shape.circle, location.belowbar, bullColor, size = size.tiny, text = "R", textcolor = color.white)
+plotshape(showExecutionRetestMarkers and visualMode != "Minimal" and labelModeMinimal and executionBearRetestMarkerSignal, "Bearish execution retest marker R", shape.circle, location.abovebar, bearColor, size = size.tiny, text = "R", textcolor = color.white)
+
+plotshape(showExecutionConfirmationMarkers and visualMode != "Minimal" and labelModeFull and executionBullConfirmationMarkerSignal, "Bullish execution confirmation marker CONF", shape.labelup, location.belowbar, bullColor, size = size.tiny, text = "CONF", textcolor = color.white)
+plotshape(showExecutionConfirmationMarkers and visualMode != "Minimal" and labelModeFull and executionBearConfirmationMarkerSignal, "Bearish execution confirmation marker CONF", shape.labeldown, location.abovebar, bearColor, size = size.tiny, text = "CONF", textcolor = color.white)
+plotshape(showExecutionConfirmationMarkers and visualMode != "Minimal" and labelModeShort and executionBullConfirmationMarkerSignal, "Bullish execution confirmation marker CNF", shape.labelup, location.belowbar, bullColor, size = size.tiny, text = "CNF", textcolor = color.white)
+plotshape(showExecutionConfirmationMarkers and visualMode != "Minimal" and labelModeShort and executionBearConfirmationMarkerSignal, "Bearish execution confirmation marker CNF", shape.labeldown, location.abovebar, bearColor, size = size.tiny, text = "CNF", textcolor = color.white)
+plotshape(showExecutionConfirmationMarkers and visualMode != "Minimal" and labelModeMinimal and executionBullConfirmationMarkerSignal, "Bullish execution confirmation marker C", shape.labelup, location.belowbar, bullColor, size = size.tiny, text = "C", textcolor = color.white)
+plotshape(showExecutionConfirmationMarkers and visualMode != "Minimal" and labelModeMinimal and executionBearConfirmationMarkerSignal, "Bearish execution confirmation marker C", shape.labeldown, location.abovebar, bearColor, size = size.tiny, text = "C", textcolor = color.white)
 
 //=============================================================================
 // 13. TRADE PLAN
@@ -1596,7 +1657,7 @@ if barstate.islast
 
         if isMorningBrief
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 READ PR7", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 READ PR8", text_color = color.white, bgcolor = panelColor, text_size = size.small)
             table.cell(dash, 0, 1, "MORNING BRIEF", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 1, "", bgcolor = color.new(color.black, 0))
 
@@ -1629,7 +1690,7 @@ if barstate.islast
 
         else if isExecutionFocus
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 READ PR7", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 READ PR8", text_color = color.white, bgcolor = panelColor, text_size = size.small)
             table.cell(dash, 0, 1, "EXECUTION FOCUS", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 1, lastDecision, text_color = decisionColor, bgcolor = color.new(color.black, 0), text_size = size.large)
 
@@ -1668,7 +1729,7 @@ if barstate.islast
 
         else if isTradeManagement
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 READ PR7", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 READ PR8", text_color = color.white, bgcolor = panelColor, text_size = size.small)
             table.cell(dash, 0, 1, "TRADE MANAGEMENT", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 1, lastPlanDirection, text_color = lastPlanDirection == "LONG" ? bullColor : lastPlanDirection == "SHORT" ? bearColor : neutralColor, bgcolor = color.new(color.black, 0), text_size = size.large)
 
@@ -1695,7 +1756,7 @@ if barstate.islast
 
         else if isFull
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 READ PR7", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 READ PR8", text_color = color.white, bgcolor = panelColor, text_size = size.small)
 
             table.cell(dash, 0, 1, "FULL DASHBOARD", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 1, "", bgcolor = color.new(color.black, 0))
