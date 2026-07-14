@@ -1,6 +1,6 @@
 //@version=6
 indicator(
-     "ICE Genesis v1.0 - IFA PR6",
+     "ICE Genesis v1.0 - IFA PR7",
 shorttitle = "ICEGen",     overlay = true,
      max_labels_count = 250,
      max_lines_count = 200,
@@ -482,6 +482,38 @@ ifaImbalanceLegToleranceATR = input.float(
      group = groupIFA
 )
 
+ifaJudasMemoryBars = input.int(
+     24,
+     "IFA Judas swing memory bars",
+     minval = 1,
+     maxval = 200,
+     group = groupIFA
+)
+
+ifaRequireZigZagGateForJudas = input.bool(
+     true,
+     "Require Zig Zag gate for Judas swing",
+     group = groupIFA
+)
+
+ifaRequireProtectedGuardForJudas = input.bool(
+     true,
+     "Require protected guard for Judas swing",
+     group = groupIFA
+)
+
+ifaRequireDisplacementForJudas = input.bool(
+     true,
+     "Require reversal displacement for Judas swing",
+     group = groupIFA
+)
+
+ifaRequireImbalanceForJudas = input.bool(
+     true,
+     "Require imbalance for Judas swing",
+     group = groupIFA
+)
+
 showSmartTradePanel = input.bool(true, "Show smart trade planner in dashboard", group = groupVisual)
 asiaSession = input.session("1900-0200", "Asia session", group = groupTime)
 londonSession = input.session("0200-0500", "London session", group = groupTime)
@@ -503,9 +535,9 @@ londonShade = color.new(color.rgb(35, 95, 180), 91)
 newYorkShade = color.new(color.rgb(130, 70, 170), 91)
 
 //=============================================================================
-// 2A. CHART READABILITY LABEL TEXT — PR9 / ZIG ZAG PR3 / IFA PR6
+// 2A. CHART READABILITY LABEL TEXT — PR9 / ZIG ZAG PR3 / IFA PR7
 // Centralized label text for Full / Short / Minimal chart display modes.
-// IFA PR6 preserves PR5 mapping and adds liquidity void / imbalance alignment quality.
+// IFA PR7 preserves PR6 imbalance alignment and adds Judas swing detection quality.
 //=============================================================================
 labelModeFull = chartLabelMode == "Full"
 labelModeShort = chartLabelMode == "Short"
@@ -1578,7 +1610,7 @@ zigZagDashboardText = not showZigZag ? "Off" :
 zigZagDashboardColor = not showZigZag ? neutralColor : zigZagTrendColor
 
 //=============================================================================
-// 11C. INSTITUTIONAL FOOTPRINT ALIGNMENT ENGINE — PR1 / PR2 / PR3 / PR5 / PR6
+// 11C. INSTITUTIONAL FOOTPRINT ALIGNMENT ENGINE — PR1 / PR2 / PR3 / PR5 / PR6 / PR7
 // PR1 adds a Zig Zag structure gate for BOS / CHoCH quality.
 // PR2 separates normal BOS / CHoCH events from institutional-quality structure
 // events by requiring the Zig Zag gate, liquidity context, displacement, and
@@ -1586,7 +1618,8 @@ zigZagDashboardColor = not showZigZag ? neutralColor : zigZagTrendColor
 // PR3 adds order-block leg alignment so OB quality must fit the active Zig Zag
 // structure leg.
 // PR5 maps readable BOS / CHoCH lines from the previous Zig Zag swing to the new confirmed break swing.
-// PR6 adds liquidity void / imbalance alignment quality. BUY / SELL logic is not changed.
+// PR6 adds liquidity void / imbalance alignment quality.
+// PR7 adds bullish / bearish Judas swing detection. BUY / SELL logic is not changed.
 //=============================================================================
 ifaBullZigZagGate = enableInstitutionalFootprintAlignment and showZigZag and
      (zigZagBullStructure or (ifaAllowTransitionStructure and zigZagTransitionStructure))
@@ -1975,6 +2008,94 @@ ifaOBQualityDashboardColor = not enableInstitutionalFootprintAlignment ? neutral
      str.contains(ifaOBQualityDashboardText, "Bear OB Quality") ? bearColor :
      str.contains(ifaOBQualityDashboardText, "Quality") ? bullColor :
      str.contains(ifaOBQualityDashboardText, "Need") ? liqColor : neutralColor
+
+// IFA PR7 — Judas Swing Detection.
+// A bullish Judas sweeps sell-side liquidity, keeps the protected low intact,
+// then reverses upward with displacement and an imbalance footprint.
+// A bearish Judas sweeps buy-side liquidity, keeps the protected high intact,
+// then reverses downward with displacement and an imbalance footprint.
+ifaBullJudasLiquidityContext = recentSSLSweep
+ifaBearJudasLiquidityContext = recentBSLSweep
+
+ifaBullJudasZigZagContext = not ifaRequireZigZagGateForJudas or ifaBullZigZagGate
+ifaBearJudasZigZagContext = not ifaRequireZigZagGateForJudas or ifaBearZigZagGate
+
+ifaBullJudasProtectedGuard = not ifaRequireProtectedGuardForJudas or (not sniperBullSetupInvalidated and not sniperBullProtectedLowSweptNow)
+ifaBearJudasProtectedGuard = not ifaRequireProtectedGuardForJudas or (not sniperBearSetupInvalidated and not sniperBearProtectedHighSweptNow)
+
+ifaBullJudasDisplacementContext = not ifaRequireDisplacementForJudas or bullDisplacement or recentBullDisplacement
+ifaBearJudasDisplacementContext = not ifaRequireDisplacementForJudas or bearDisplacement or recentBearDisplacement
+
+ifaBullJudasImbalanceContext = not ifaRequireImbalanceForJudas or (ifaBullImbalanceFresh and ifaBullImbalanceLegAligned)
+ifaBearJudasImbalanceContext = not ifaRequireImbalanceForJudas or (ifaBearImbalanceFresh and ifaBearImbalanceLegAligned)
+
+institutionalBullJudasSwing = enableInstitutionalFootprintAlignment and ifaBullJudasLiquidityContext and
+     ifaBullJudasZigZagContext and ifaBullJudasProtectedGuard and
+     ifaBullJudasDisplacementContext and ifaBullJudasImbalanceContext
+
+institutionalBearJudasSwing = enableInstitutionalFootprintAlignment and ifaBearJudasLiquidityContext and
+     ifaBearJudasZigZagContext and ifaBearJudasProtectedGuard and
+     ifaBearJudasDisplacementContext and ifaBearJudasImbalanceContext
+
+institutionalBullJudasSignal = institutionalBullJudasSwing and not (institutionalBullJudasSwing[1] == true)
+institutionalBearJudasSignal = institutionalBearJudasSwing and not (institutionalBearJudasSwing[1] == true)
+institutionalJudasSwing = institutionalBullJudasSwing or institutionalBearJudasSwing
+
+ifaBullJudasMissingText = not ifaBullJudasLiquidityContext ? "Need SSL Judas Sweep" :
+     not ifaBullJudasZigZagContext ? "Need Bull ZZ Gate" :
+     not ifaBullJudasProtectedGuard ? "Bull PL swept / reset" :
+     not ifaBullJudasDisplacementContext ? "Need Bull Reversal Disp" :
+     not ifaBullJudasImbalanceContext ? "Need Bull Imbalance" : "Bull Judas Ready"
+
+ifaBearJudasMissingText = not ifaBearJudasLiquidityContext ? "Need BSL Judas Sweep" :
+     not ifaBearJudasZigZagContext ? "Need Bear ZZ Gate" :
+     not ifaBearJudasProtectedGuard ? "Bear PH swept / reset" :
+     not ifaBearJudasDisplacementContext ? "Need Bear Reversal Disp" :
+     not ifaBearJudasImbalanceContext ? "Need Bear Imbalance" : "Bear Judas Ready"
+
+var int ifaLastJudasBar = na
+var int ifaLastJudasDirection = 0
+var string ifaLastJudasText = "Waiting"
+var color ifaLastJudasColor = neutralColor
+
+if institutionalBullJudasSignal
+    ifaLastJudasBar := bar_index
+    ifaLastJudasDirection := 1
+    ifaLastJudasText := "Bull Judas Swing ✓"
+    ifaLastJudasColor := bullColor
+else if institutionalBearJudasSignal
+    ifaLastJudasBar := bar_index
+    ifaLastJudasDirection := -1
+    ifaLastJudasText := "Bear Judas Swing ✓"
+    ifaLastJudasColor := bearColor
+else if enableInstitutionalFootprintAlignment and ifaBullJudasLiquidityContext and (orderFlow == 1 or ifaBullJudasZigZagContext)
+    ifaLastJudasBar := bar_index
+    ifaLastJudasDirection := 1
+    ifaLastJudasText := ifaBullJudasMissingText
+    ifaLastJudasColor := liqColor
+else if enableInstitutionalFootprintAlignment and ifaBearJudasLiquidityContext and (orderFlow == -1 or ifaBearJudasZigZagContext)
+    ifaLastJudasBar := bar_index
+    ifaLastJudasDirection := -1
+    ifaLastJudasText := ifaBearJudasMissingText
+    ifaLastJudasColor := liqColor
+
+ifaJudasFresh = enableInstitutionalFootprintAlignment and not na(ifaLastJudasBar) and
+     bar_index - ifaLastJudasBar <= ifaJudasMemoryBars
+
+ifaJudasDashboardText = not enableInstitutionalFootprintAlignment ? "Off" :
+     ifaJudasFresh ? ifaLastJudasText :
+     orderFlow == 1 ? ifaBullJudasMissingText :
+     orderFlow == -1 ? ifaBearJudasMissingText :
+     zigZagBullStructure or zigZagTransitionStructure ? ifaBullJudasMissingText :
+     zigZagBearStructure ? ifaBearJudasMissingText : "Waiting for Judas swing"
+
+ifaJudasDashboardColor = not enableInstitutionalFootprintAlignment ? neutralColor :
+     ifaJudasFresh ? ifaLastJudasColor :
+     str.contains(ifaJudasDashboardText, "Bull Judas") ? bullColor :
+     str.contains(ifaJudasDashboardText, "Bear Judas") ? bearColor :
+     str.contains(ifaJudasDashboardText, "Ready") ? bullColor :
+     str.contains(ifaJudasDashboardText, "swept") ? bearColor :
+     str.contains(ifaJudasDashboardText, "Need") ? liqColor : neutralColor
 
 //=============================================================================
 // 12. HIGHLIGHTED ORDER-BLOCK / FVG ZONES
@@ -3014,7 +3135,7 @@ if barstate.islast
 
         if isMorningBrief
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 IFA PR6", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 IFA PR7", text_color = color.white, bgcolor = panelColor, text_size = size.small)
             table.cell(dash, 0, 1, "MORNING BRIEF", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 1, "", bgcolor = color.new(color.black, 0))
 
@@ -3047,7 +3168,7 @@ if barstate.islast
 
         else if isExecutionFocus
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 IFA PR6", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 IFA PR7", text_color = color.white, bgcolor = panelColor, text_size = size.small)
             table.cell(dash, 0, 1, "EXECUTION FOCUS", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 1, lastDecision, text_color = decisionColor, bgcolor = color.new(color.black, 0), text_size = size.large)
 
@@ -3108,9 +3229,12 @@ if barstate.islast
             table.cell(dash, 0, 20, "Briefing", text_color = neutralColor, bgcolor = panelColor)
             table.cell(dash, 1, 20, marketBriefingText, text_color = marketDirectionColor, bgcolor = panelColor, text_size = size.small)
 
+            table.cell(dash, 0, 21, "Judas Swing", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 21, ifaJudasDashboardText, text_color = ifaJudasDashboardColor, bgcolor = panelColor, text_size = size.tiny)
+
         else if isTradeManagement
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 IFA PR6", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 IFA PR7", text_color = color.white, bgcolor = panelColor, text_size = size.small)
             table.cell(dash, 0, 1, "TRADE MANAGEMENT", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 1, lastPlanDirection, text_color = lastPlanDirection == "LONG" ? bullColor : lastPlanDirection == "SHORT" ? bearColor : neutralColor, bgcolor = color.new(color.black, 0), text_size = size.large)
 
@@ -3137,7 +3261,7 @@ if barstate.islast
 
         else if isFull
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 IFA PR6", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 IFA PR7", text_color = color.white, bgcolor = panelColor, text_size = size.small)
 
             table.cell(dash, 0, 1, "FULL DASHBOARD", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 1, "", bgcolor = color.new(color.black, 0))
@@ -3189,6 +3313,9 @@ if barstate.islast
 
             table.cell(dash, 0, 17, "Next Event", text_color = neutralColor, bgcolor = panelColor)
             table.cell(dash, 1, 17, expectedNextEventText, text_color = marketDirectionColor, bgcolor = panelColor, text_size = size.tiny)
+
+            table.cell(dash, 0, 18, "Judas Swing", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 18, ifaJudasDashboardText, text_color = ifaJudasDashboardColor, bgcolor = panelColor, text_size = size.tiny)
 
 //=============================================================================
 // 16. ALERTS
