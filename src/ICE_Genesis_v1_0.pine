@@ -1,6 +1,6 @@
 //@version=6
 indicator(
-     "ICE Genesis v1.0 - Zig Zag PR2 Default Cleanup",
+     "ICE Genesis v1.0 - Zig Zag PR3",
 shorttitle = "ICEGen",     overlay = true,
      max_labels_count = 250,
      max_lines_count = 200,
@@ -420,9 +420,9 @@ londonShade = color.new(color.rgb(35, 95, 180), 91)
 newYorkShade = color.new(color.rgb(130, 70, 170), 91)
 
 //=============================================================================
-// 2A. CHART READABILITY LABEL TEXT — PR9 / ZIG ZAG PR2
+// 2A. CHART READABILITY LABEL TEXT — PR9 / ZIG ZAG PR3
 // Centralized label text for Full / Short / Minimal chart display modes.
-// Zig Zag PR2 Fix2 improves price label readability and corrects high/low structure comparison.
+// Zig Zag PR3 preserves price-label cleanup and adds trend classification.
 //=============================================================================
 labelModeFull = chartLabelMode == "Full"
 labelModeShort = chartLabelMode == "Short"
@@ -1141,10 +1141,10 @@ if showExternalEvents and externalBearBOS
 
 
 //=============================================================================
-// 11A. ZIG ZAG MARKET STRUCTURE OVERLAY — PR1 / PR2
+// 11A. ZIG ZAG MARKET STRUCTURE OVERLAY — PR1 / PR2 / PR3
 // Uses confirmed swing highs / lows only. This keeps the overlay clean, avoids
 // repainting the current candle, and does not add TradingView plot usage.
-// PR2 Fix2 offsets high / low price labels and compares new swing highs/lows against the prior same-side swing.
+// PR3 classifies the latest HH / HL / LH / LL sequence as bullish, bearish, transition, or mixed structure.
 //=============================================================================
 zigZagSourceIsInternal = zigZagSwingSource == "Internal"
 zigZagHighPivot = zigZagSourceIsInternal ? intPH : extPH
@@ -1186,8 +1186,12 @@ var float zigZagCurrentCompareLow = na
 var line zigZagLastLine = na
 var label zigZagLastLabel = na
 var string zigZagLastMarkText = "—"
+var string zigZagLastHighMarkText = "—"
+var string zigZagLastLowMarkText = "—"
 var string zigZagStructureText = "Waiting"
+var string zigZagTrendText = "Waiting"
 var color zigZagStructureColor = neutralColor
+var color zigZagTrendColor = neutralColor
 
 zigZagHighEvent = showZigZag and not na(zigZagHighPivot)
 zigZagLowEvent = showZigZag and not na(zigZagLowPivot)
@@ -1205,6 +1209,7 @@ if zigZagHighEvent
             zigZagLastPivotBar := zigZagHighPivotBar
             zigZagLastHighPrice := zigZagHighPivot
             zigZagLastMarkText := highMarkText
+            zigZagLastHighMarkText := highMarkText
             zigZagStructureText := zigZagSwingSource + " " + highMarkText
             zigZagStructureColor := highMarkColor
 
@@ -1266,6 +1271,7 @@ if zigZagHighEvent
         zigZagLastLine := newZigLine
         zigZagLastLabel := newZigLabel
         zigZagLastMarkText := highMarkText
+        zigZagLastHighMarkText := highMarkText
         zigZagStructureText := zigZagSwingSource + " " + highMarkText
         zigZagStructureColor := highMarkColor
 
@@ -1282,6 +1288,7 @@ if zigZagLowEvent
             zigZagLastPivotBar := zigZagLowPivotBar
             zigZagLastLowPrice := zigZagLowPivot
             zigZagLastMarkText := lowMarkText
+            zigZagLastLowMarkText := lowMarkText
             zigZagStructureText := zigZagSwingSource + " " + lowMarkText
             zigZagStructureColor := lowMarkColor
 
@@ -1343,13 +1350,35 @@ if zigZagLowEvent
         zigZagLastLine := newZigLine
         zigZagLastLabel := newZigLabel
         zigZagLastMarkText := lowMarkText
+        zigZagLastLowMarkText := lowMarkText
         zigZagStructureText := zigZagSwingSource + " " + lowMarkText
         zigZagStructureColor := lowMarkColor
 
-zigZagDashboardText = not showZigZag ? "Off" :
-     zigZagLastMarkText == "—" ? "Waiting for swings" : zigZagStructureText
+zigZagHasAnyHigh = zigZagLastHighMarkText != "—"
+zigZagHasAnyLow = zigZagLastLowMarkText != "—"
+zigZagHasClassifiedHigh = zigZagLastHighMarkText == "HH" or zigZagLastHighMarkText == "LH"
+zigZagHasClassifiedLow = zigZagLastLowMarkText == "HL" or zigZagLastLowMarkText == "LL"
+zigZagBullStructure = zigZagLastHighMarkText == "HH" and zigZagLastLowMarkText == "HL"
+zigZagBearStructure = zigZagLastHighMarkText == "LH" and zigZagLastLowMarkText == "LL"
+zigZagTransitionStructure = zigZagHasClassifiedHigh and zigZagHasClassifiedLow and not zigZagBullStructure and not zigZagBearStructure
 
-zigZagDashboardColor = not showZigZag ? neutralColor : zigZagStructureColor
+zigZagTrendText := not showZigZag ? "Off" :
+     (not zigZagHasAnyHigh or not zigZagHasAnyLow) ? "Waiting" :
+     (not zigZagHasClassifiedHigh or not zigZagHasClassifiedLow) ? "Range / Mixed" :
+     zigZagBullStructure ? "Bullish Structure" :
+     zigZagBearStructure ? "Bearish Structure" :
+     zigZagTransitionStructure ? "Transition" : "Range / Mixed"
+
+zigZagTrendColor := not showZigZag ? neutralColor :
+     zigZagBullStructure ? bullColor :
+     zigZagBearStructure ? bearColor :
+     zigZagTransitionStructure ? liqColor : neutralColor
+
+zigZagDashboardText = not showZigZag ? "Off" :
+     zigZagTrendText == "Waiting" ? "Waiting for swings" :
+     zigZagTrendText + " / " + zigZagSwingSource + " " + zigZagLastMarkText
+
+zigZagDashboardColor = not showZigZag ? neutralColor : zigZagTrendColor
 
 //=============================================================================
 // 12. HIGHLIGHTED ORDER-BLOCK / FVG ZONES
@@ -2389,7 +2418,7 @@ if barstate.islast
 
         if isMorningBrief
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 ZZ PR2 FIX3", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 ZZ PR3", text_color = color.white, bgcolor = panelColor, text_size = size.small)
             table.cell(dash, 0, 1, "MORNING BRIEF", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 1, "", bgcolor = color.new(color.black, 0))
 
@@ -2422,7 +2451,7 @@ if barstate.islast
 
         else if isExecutionFocus
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 ZZ PR2 FIX3", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 ZZ PR3", text_color = color.white, bgcolor = panelColor, text_size = size.small)
             table.cell(dash, 0, 1, "EXECUTION FOCUS", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 1, lastDecision, text_color = decisionColor, bgcolor = color.new(color.black, 0), text_size = size.large)
 
@@ -2473,7 +2502,7 @@ if barstate.islast
 
         else if isTradeManagement
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 ZZ PR2 FIX3", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 ZZ PR3", text_color = color.white, bgcolor = panelColor, text_size = size.small)
             table.cell(dash, 0, 1, "TRADE MANAGEMENT", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 1, lastPlanDirection, text_color = lastPlanDirection == "LONG" ? bullColor : lastPlanDirection == "SHORT" ? bearColor : neutralColor, bgcolor = color.new(color.black, 0), text_size = size.large)
 
@@ -2500,7 +2529,7 @@ if barstate.islast
 
         else if isFull
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 ZZ PR2 FIX3", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 ZZ PR3", text_color = color.white, bgcolor = panelColor, text_size = size.small)
 
             table.cell(dash, 0, 1, "FULL DASHBOARD", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 1, "", bgcolor = color.new(color.black, 0))
