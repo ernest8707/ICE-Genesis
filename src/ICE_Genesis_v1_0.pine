@@ -1,6 +1,6 @@
 //@version=6
 indicator(
-     "ICE Genesis v1.0 - Sniper PR3",
+     "ICE Genesis v1.0 - Zig Zag PR1",
 shorttitle = "ICEGen",     overlay = true,
      max_labels_count = 250,
      max_lines_count = 200,
@@ -36,6 +36,7 @@ groupDashboard = "10. Adaptive Dashboard"
 groupInstitutionalBias = "11. Institutional Bias"
 groupExecution = "12. Execution Engine"
 groupSniper    = "13. Sniper Model Engine"
+groupZigZag    = "14. Zig Zag Market Structure"
 showDashboard = input.bool(true, "Show dashboard", group = groupCore)
 dashboardMode = input.string("Execution", "Dashboard mode", options = ["Full", "Morning Brief", "Execution", "Trade Management", "Compact", "Minimal", "Off"], group = groupDashboard)
 enableInstitutionalBias = input.bool(
@@ -346,6 +347,49 @@ chartLabelMode = input.string(
      options = ["Full", "Short", "Minimal"],
      group = groupVisual
 )
+
+showZigZag = input.bool(
+     true,
+     "Show Zig Zag",
+     group = groupZigZag
+)
+
+zigZagSwingSource = input.string(
+     "External",
+     "Zig Zag swing source",
+     options = ["Internal", "External"],
+     group = groupZigZag
+)
+
+showZigZagLabels = input.bool(
+     true,
+     "Show HH / HL / LH / LL labels",
+     group = groupZigZag
+)
+
+zigZagLabelMode = input.string(
+     "Short",
+     "Zig Zag label mode",
+     options = ["Full", "Short", "Off"],
+     group = groupZigZag
+)
+
+maxZigZagLegs = input.int(
+     12,
+     "Maximum Zig Zag legs",
+     minval = 2,
+     maxval = 50,
+     group = groupZigZag
+)
+
+zigZagLineWidth = input.int(
+     2,
+     "Zig Zag line thickness",
+     minval = 1,
+     maxval = 4,
+     group = groupZigZag
+)
+
 showSmartTradePanel = input.bool(true, "Show smart trade planner in dashboard", group = groupVisual)
 asiaSession = input.session("1900-0200", "Asia session", group = groupTime)
 londonSession = input.session("0200-0500", "London session", group = groupTime)
@@ -367,9 +411,9 @@ londonShade = color.new(color.rgb(35, 95, 180), 91)
 newYorkShade = color.new(color.rgb(130, 70, 170), 91)
 
 //=============================================================================
-// 2A. CHART READABILITY LABEL TEXT — PR9 / SNIPER PR3
+// 2A. CHART READABILITY LABEL TEXT — PR9 / ZIG ZAG PR1
 // Centralized label text for Full / Short / Minimal chart display modes.
-// Sniper PR3 preserves PR2 sweep validation and adds HTF liquidity-zone context.
+// Zig Zag PR1 preserves Sniper PR3 and adds a clean market-structure overlay.
 //=============================================================================
 labelModeFull = chartLabelMode == "Full"
 labelModeShort = chartLabelMode == "Short"
@@ -1085,6 +1129,196 @@ if showExternalEvents and externalBullBOS
     addStructureMark(labelBullBOS, lastExtHighBar, lastExtHigh, bullColor, true)
 if showExternalEvents and externalBearBOS
     addStructureMark(labelBearBOS, lastExtLowBar, lastExtLow, bearColor, true)
+
+
+//=============================================================================
+// 11A. ZIG ZAG MARKET STRUCTURE OVERLAY — PR1
+// Uses confirmed swing highs / lows only. This keeps the overlay clean, avoids
+// repainting the current candle, and does not add TradingView plot usage.
+//=============================================================================
+zigZagSourceIsInternal = zigZagSwingSource == "Internal"
+zigZagHighPivot = zigZagSourceIsInternal ? intPH : extPH
+zigZagLowPivot = zigZagSourceIsInternal ? intPL : extPL
+zigZagHighPivotBar = zigZagSourceIsInternal ? bar_index - internalLen : bar_index - externalLen
+zigZagLowPivotBar = zigZagSourceIsInternal ? bar_index - internalLen : bar_index - externalLen
+
+zigZagRawLabel(string rawText) =>
+    zigZagLabelMode == "Full" ?
+         rawText == "HH" ? "Higher High" :
+         rawText == "HL" ? "Higher Low" :
+         rawText == "LH" ? "Lower High" :
+         rawText == "LL" ? "Lower Low" :
+         rawText == "H" ? "High" :
+         rawText == "L" ? "Low" : rawText :
+     rawText
+
+var array<line> zigZagLines = array.new<line>()
+var array<label> zigZagLabels = array.new<label>()
+
+var float zigZagLastPivotPrice = na
+var int zigZagLastPivotBar = na
+var int zigZagLastPivotType = 0
+var float zigZagLastHighPrice = na
+var float zigZagLastLowPrice = na
+var float zigZagCurrentCompareHigh = na
+var float zigZagCurrentCompareLow = na
+var line zigZagLastLine = na
+var label zigZagLastLabel = na
+var string zigZagLastMarkText = "—"
+var string zigZagStructureText = "Waiting"
+var color zigZagStructureColor = neutralColor
+
+zigZagHighEvent = showZigZag and not na(zigZagHighPivot)
+zigZagLowEvent = showZigZag and not na(zigZagLowPivot)
+
+if zigZagHighEvent
+    string highMarkText = na(zigZagCurrentCompareHigh) ? (na(zigZagLastHighPrice) ? "H" : zigZagHighPivot > zigZagLastHighPrice ? "HH" : "LH") :
+         zigZagHighPivot > zigZagCurrentCompareHigh ? "HH" : "LH"
+    color highMarkColor = highMarkText == "HH" ? bullColor : highMarkText == "LH" ? bearColor : neutralColor
+
+    if zigZagLastPivotType == 1
+        bool replaceHigh = na(zigZagLastPivotPrice) or zigZagHighPivot >= zigZagLastPivotPrice
+        if replaceHigh
+            zigZagLastPivotPrice := zigZagHighPivot
+            zigZagLastPivotBar := zigZagHighPivotBar
+            zigZagLastHighPrice := zigZagHighPivot
+            zigZagLastMarkText := highMarkText
+            zigZagStructureText := zigZagSwingSource + " " + highMarkText
+            zigZagStructureColor := highMarkColor
+
+            if not na(zigZagLastLine)
+                line.set_x2(zigZagLastLine, zigZagHighPivotBar)
+                line.set_y2(zigZagLastLine, zigZagHighPivot)
+
+            if showZigZagLabels and zigZagLabelMode != "Off" and not na(zigZagLastLabel)
+                label.set_x(zigZagLastLabel, zigZagHighPivotBar)
+                label.set_y(zigZagLastLabel, zigZagHighPivot)
+                label.set_text(zigZagLastLabel, zigZagRawLabel(highMarkText))
+                label.set_textcolor(zigZagLastLabel, highMarkColor)
+    else
+        line newZigLine = na
+        label newZigLabel = na
+
+        if not na(zigZagLastPivotPrice) and not na(zigZagLastPivotBar)
+            newZigLine := line.new(
+                 zigZagLastPivotBar, zigZagLastPivotPrice,
+                 zigZagHighPivotBar, zigZagHighPivot,
+                 xloc = xloc.bar_index,
+                 extend = extend.none,
+                 color = color.new(highMarkColor, 15),
+                 width = zigZagLineWidth
+             )
+            array.push(zigZagLines, newZigLine)
+
+        if showZigZagLabels and zigZagLabelMode != "Off"
+            newZigLabel := label.new(
+                 zigZagHighPivotBar, zigZagHighPivot,
+                 zigZagRawLabel(highMarkText),
+                 xloc = xloc.bar_index,
+                 yloc = yloc.price,
+                 style = label.style_none,
+                 textcolor = highMarkColor,
+                 size = size.tiny
+             )
+            array.push(zigZagLabels, newZigLabel)
+
+        while array.size(zigZagLines) > maxZigZagLegs
+            line oldZigLine = array.shift(zigZagLines)
+            if not na(oldZigLine)
+                line.delete(oldZigLine)
+
+        while array.size(zigZagLabels) > maxZigZagLegs + 1
+            label oldZigLabel = array.shift(zigZagLabels)
+            if not na(oldZigLabel)
+                label.delete(oldZigLabel)
+
+        zigZagCurrentCompareHigh := zigZagLastHighPrice
+        zigZagLastHighPrice := zigZagHighPivot
+        zigZagLastPivotPrice := zigZagHighPivot
+        zigZagLastPivotBar := zigZagHighPivotBar
+        zigZagLastPivotType := 1
+        zigZagLastLine := newZigLine
+        zigZagLastLabel := newZigLabel
+        zigZagLastMarkText := highMarkText
+        zigZagStructureText := zigZagSwingSource + " " + highMarkText
+        zigZagStructureColor := highMarkColor
+
+if zigZagLowEvent
+    string lowMarkText = na(zigZagCurrentCompareLow) ? (na(zigZagLastLowPrice) ? "L" : zigZagLowPivot > zigZagLastLowPrice ? "HL" : "LL") :
+         zigZagLowPivot > zigZagCurrentCompareLow ? "HL" : "LL"
+    color lowMarkColor = lowMarkText == "HL" ? bullColor : lowMarkText == "LL" ? bearColor : neutralColor
+
+    if zigZagLastPivotType == -1
+        bool replaceLow = na(zigZagLastPivotPrice) or zigZagLowPivot <= zigZagLastPivotPrice
+        if replaceLow
+            zigZagLastPivotPrice := zigZagLowPivot
+            zigZagLastPivotBar := zigZagLowPivotBar
+            zigZagLastLowPrice := zigZagLowPivot
+            zigZagLastMarkText := lowMarkText
+            zigZagStructureText := zigZagSwingSource + " " + lowMarkText
+            zigZagStructureColor := lowMarkColor
+
+            if not na(zigZagLastLine)
+                line.set_x2(zigZagLastLine, zigZagLowPivotBar)
+                line.set_y2(zigZagLastLine, zigZagLowPivot)
+
+            if showZigZagLabels and zigZagLabelMode != "Off" and not na(zigZagLastLabel)
+                label.set_x(zigZagLastLabel, zigZagLowPivotBar)
+                label.set_y(zigZagLastLabel, zigZagLowPivot)
+                label.set_text(zigZagLastLabel, zigZagRawLabel(lowMarkText))
+                label.set_textcolor(zigZagLastLabel, lowMarkColor)
+    else
+        line newZigLine = na
+        label newZigLabel = na
+
+        if not na(zigZagLastPivotPrice) and not na(zigZagLastPivotBar)
+            newZigLine := line.new(
+                 zigZagLastPivotBar, zigZagLastPivotPrice,
+                 zigZagLowPivotBar, zigZagLowPivot,
+                 xloc = xloc.bar_index,
+                 extend = extend.none,
+                 color = color.new(lowMarkColor, 15),
+                 width = zigZagLineWidth
+             )
+            array.push(zigZagLines, newZigLine)
+
+        if showZigZagLabels and zigZagLabelMode != "Off"
+            newZigLabel := label.new(
+                 zigZagLowPivotBar, zigZagLowPivot,
+                 zigZagRawLabel(lowMarkText),
+                 xloc = xloc.bar_index,
+                 yloc = yloc.price,
+                 style = label.style_none,
+                 textcolor = lowMarkColor,
+                 size = size.tiny
+             )
+            array.push(zigZagLabels, newZigLabel)
+
+        while array.size(zigZagLines) > maxZigZagLegs
+            line oldZigLine = array.shift(zigZagLines)
+            if not na(oldZigLine)
+                line.delete(oldZigLine)
+
+        while array.size(zigZagLabels) > maxZigZagLegs + 1
+            label oldZigLabel = array.shift(zigZagLabels)
+            if not na(oldZigLabel)
+                label.delete(oldZigLabel)
+
+        zigZagCurrentCompareLow := zigZagLastLowPrice
+        zigZagLastLowPrice := zigZagLowPivot
+        zigZagLastPivotPrice := zigZagLowPivot
+        zigZagLastPivotBar := zigZagLowPivotBar
+        zigZagLastPivotType := -1
+        zigZagLastLine := newZigLine
+        zigZagLastLabel := newZigLabel
+        zigZagLastMarkText := lowMarkText
+        zigZagStructureText := zigZagSwingSource + " " + lowMarkText
+        zigZagStructureColor := lowMarkColor
+
+zigZagDashboardText = not showZigZag ? "Off" :
+     zigZagLastMarkText == "—" ? "Waiting for swings" : zigZagStructureText
+
+zigZagDashboardColor = not showZigZag ? neutralColor : zigZagStructureColor
 
 //=============================================================================
 // 12. HIGHLIGHTED ORDER-BLOCK / FVG ZONES
@@ -2124,7 +2358,7 @@ if barstate.islast
 
         if isMorningBrief
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 SNIPER PR3", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 ZZ PR1", text_color = color.white, bgcolor = panelColor, text_size = size.small)
             table.cell(dash, 0, 1, "MORNING BRIEF", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 1, "", bgcolor = color.new(color.black, 0))
 
@@ -2157,7 +2391,7 @@ if barstate.islast
 
         else if isExecutionFocus
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 SNIPER PR3", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 ZZ PR1", text_color = color.white, bgcolor = panelColor, text_size = size.small)
             table.cell(dash, 0, 1, "EXECUTION FOCUS", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 1, lastDecision, text_color = decisionColor, bgcolor = color.new(color.black, 0), text_size = size.large)
 
@@ -2170,42 +2404,45 @@ if barstate.islast
             table.cell(dash, 0, 4, "Structure", text_color = neutralColor, bgcolor = panelColor)
             table.cell(dash, 1, 4, latestStructureEvent, text_color = str.contains(latestStructureEvent, "Bullish") ? bullColor : str.contains(latestStructureEvent, "Bearish") ? bearColor : neutralColor, bgcolor = panelColor)
 
-            table.cell(dash, 0, 5, "OB / FVG", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 5, (obActive ? zoneText : "OB ...") + " / " + (fvgActive ? fvgText : "FVG ..."), text_color = obActive ? (activeBullish ? bullColor : bearColor) : neutralColor, bgcolor = panelColor, text_size = size.tiny)
+            table.cell(dash, 0, 5, "Zig Zag", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 5, zigZagDashboardText, text_color = zigZagDashboardColor, bgcolor = panelColor, text_size = size.tiny)
 
-            table.cell(dash, 0, 6, "Retest", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 6, executionRetestText, text_color = executionRetestText == "No Retest" ? neutralColor : marketDirectionColor, bgcolor = panelColor)
+            table.cell(dash, 0, 6, "OB / FVG", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 6, (obActive ? zoneText : "OB ...") + " / " + (fvgActive ? fvgText : "FVG ..."), text_color = obActive ? (activeBullish ? bullColor : bearColor) : neutralColor, bgcolor = panelColor, text_size = size.tiny)
 
-            table.cell(dash, 0, 7, "Execution", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 7, executionStatusText + " / " + executionEntryLockText, text_color = executionStatusText == "Triggered" ? bullColor : executionStatusText == "Stand Down" ? bearColor : neutralColor, bgcolor = panelColor)
+            table.cell(dash, 0, 7, "Retest", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 7, executionRetestText, text_color = executionRetestText == "No Retest" ? neutralColor : marketDirectionColor, bgcolor = panelColor)
 
-            table.cell(dash, 0, 8, "Entry Permission", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 8, executionEntryPermissionText, text_color = executionEntryPermissionColor, bgcolor = panelColor)
+            table.cell(dash, 0, 8, "Execution", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 8, executionStatusText + " / " + executionEntryLockText, text_color = executionStatusText == "Triggered" ? bullColor : executionStatusText == "Stand Down" ? bearColor : neutralColor, bgcolor = panelColor)
 
-            table.cell(dash, 0, 9, "Protected Guard", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 9, sniperProtectedGuardText, text_color = sniperProtectedGuardColor, bgcolor = panelColor, text_size = size.tiny)
+            table.cell(dash, 0, 9, "Entry Permission", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 9, executionEntryPermissionText, text_color = executionEntryPermissionColor, bgcolor = panelColor)
 
-            table.cell(dash, 0, 10, "Sniper Sweep", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 10, sniperInternalSweepText, text_color = sniperInternalSweepColor, bgcolor = panelColor, text_size = size.tiny)
+            table.cell(dash, 0, 10, "Protected Guard", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 10, sniperProtectedGuardText, text_color = sniperProtectedGuardColor, bgcolor = panelColor, text_size = size.tiny)
 
-            table.cell(dash, 0, 11, "HTF Context", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 11, sniperHTFContextText, text_color = sniperHTFContextColor, bgcolor = panelColor, text_size = size.tiny)
+            table.cell(dash, 0, 11, "Sniper Sweep", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 11, sniperInternalSweepText, text_color = sniperInternalSweepColor, bgcolor = panelColor, text_size = size.tiny)
 
-            table.cell(dash, 0, 12, "OTE / HTF", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 12, (dashboardOTE ? "OTE OK" : "OTE ...") + " / " + biasText, text_color = dashboardOTE ? bullColor : neutralColor, bgcolor = panelColor, text_size = size.tiny)
+            table.cell(dash, 0, 12, "HTF Context", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 12, sniperHTFContextText, text_color = sniperHTFContextColor, bgcolor = panelColor, text_size = size.tiny)
 
-            table.cell(dash, 0, 13, "Objective", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 13, currentObjectiveText, text_color = marketDirectionColor, bgcolor = panelColor, text_size = size.tiny)
+            table.cell(dash, 0, 13, "OTE / HTF", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 13, (dashboardOTE ? "OTE OK" : "OTE ...") + " / " + biasText, text_color = dashboardOTE ? bullColor : neutralColor, bgcolor = panelColor, text_size = size.tiny)
 
-            table.cell(dash, 0, 14, "Next Event", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 14, expectedNextEventText, text_color = marketDirectionColor, bgcolor = panelColor, text_size = size.tiny)
+            table.cell(dash, 0, 14, "Objective", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 14, currentObjectiveText, text_color = marketDirectionColor, bgcolor = panelColor, text_size = size.tiny)
 
-            table.cell(dash, 0, 15, "Briefing", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 15, marketBriefingText, text_color = marketDirectionColor, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 0, 15, "Next Event", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 15, expectedNextEventText, text_color = marketDirectionColor, bgcolor = panelColor, text_size = size.tiny)
+
+            table.cell(dash, 0, 16, "Briefing", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 16, marketBriefingText, text_color = marketDirectionColor, bgcolor = panelColor, text_size = size.small)
 
         else if isTradeManagement
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 SNIPER PR3", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 ZZ PR1", text_color = color.white, bgcolor = panelColor, text_size = size.small)
             table.cell(dash, 0, 1, "TRADE MANAGEMENT", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 1, lastPlanDirection, text_color = lastPlanDirection == "LONG" ? bullColor : lastPlanDirection == "SHORT" ? bearColor : neutralColor, bgcolor = color.new(color.black, 0), text_size = size.large)
 
@@ -2232,7 +2469,7 @@ if barstate.islast
 
         else if isFull
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 SNIPER PR3", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 ZZ PR1", text_color = color.white, bgcolor = panelColor, text_size = size.small)
 
             table.cell(dash, 0, 1, "FULL DASHBOARD", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 1, "", bgcolor = color.new(color.black, 0))
@@ -2240,35 +2477,38 @@ if barstate.islast
             table.cell(dash, 0, 2, "Direction", text_color = neutralColor, bgcolor = panelColor)
             table.cell(dash, 1, 2, marketDirectionText, text_color = marketDirectionColor, bgcolor = panelColor)
 
-            table.cell(dash, 0, 3, "Narrative", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 3, institutionalNarrativeText, text_color = marketDirectionColor, bgcolor = panelColor)
+            table.cell(dash, 0, 3, "Zig Zag", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 3, zigZagDashboardText, text_color = zigZagDashboardColor, bgcolor = panelColor, text_size = size.tiny)
 
-            table.cell(dash, 0, 4, "Decision", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 4, lastDecision, text_color = decisionColor, bgcolor = panelColor, text_size = size.large)
+            table.cell(dash, 0, 4, "Narrative", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 4, institutionalNarrativeText, text_color = marketDirectionColor, bgcolor = panelColor)
 
-            table.cell(dash, 0, 5, "Retest", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 5, executionRetestText, text_color = executionRetestText == "No Retest" ? neutralColor : marketDirectionColor, bgcolor = panelColor)
+            table.cell(dash, 0, 5, "Decision", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 5, lastDecision, text_color = decisionColor, bgcolor = panelColor, text_size = size.large)
 
-            table.cell(dash, 0, 6, "Execution", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 6, executionStatusText + " / " + executionEntryLockText, text_color = executionStatusText == "Triggered" ? bullColor : executionStatusText == "Stand Down" ? bearColor : neutralColor, bgcolor = panelColor)
+            table.cell(dash, 0, 6, "Retest", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 6, executionRetestText, text_color = executionRetestText == "No Retest" ? neutralColor : marketDirectionColor, bgcolor = panelColor)
 
-            table.cell(dash, 0, 7, "Entry Permission", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 7, executionEntryPermissionText, text_color = executionEntryPermissionColor, bgcolor = panelColor)
+            table.cell(dash, 0, 7, "Execution", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 7, executionStatusText + " / " + executionEntryLockText, text_color = executionStatusText == "Triggered" ? bullColor : executionStatusText == "Stand Down" ? bearColor : neutralColor, bgcolor = panelColor)
 
-            table.cell(dash, 0, 8, "Protected Guard", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 8, sniperProtectedGuardText, text_color = sniperProtectedGuardColor, bgcolor = panelColor, text_size = size.tiny)
+            table.cell(dash, 0, 8, "Entry Permission", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 8, executionEntryPermissionText, text_color = executionEntryPermissionColor, bgcolor = panelColor)
 
-            table.cell(dash, 0, 9, "Sniper Sweep", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 9, sniperInternalSweepText, text_color = sniperInternalSweepColor, bgcolor = panelColor, text_size = size.tiny)
+            table.cell(dash, 0, 9, "Protected Guard", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 9, sniperProtectedGuardText, text_color = sniperProtectedGuardColor, bgcolor = panelColor, text_size = size.tiny)
 
-            table.cell(dash, 0, 10, "HTF Context", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 10, sniperHTFContextText, text_color = sniperHTFContextColor, bgcolor = panelColor, text_size = size.tiny)
+            table.cell(dash, 0, 10, "Sniper Sweep", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 10, sniperInternalSweepText, text_color = sniperInternalSweepColor, bgcolor = panelColor, text_size = size.tiny)
 
-            table.cell(dash, 0, 11, "Objective", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 11, currentObjectiveText, text_color = marketDirectionColor, bgcolor = panelColor, text_size = size.tiny)
+            table.cell(dash, 0, 11, "HTF Context", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 11, sniperHTFContextText, text_color = sniperHTFContextColor, bgcolor = panelColor, text_size = size.tiny)
 
-            table.cell(dash, 0, 12, "Next Event", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 12, expectedNextEventText, text_color = marketDirectionColor, bgcolor = panelColor, text_size = size.tiny)
+            table.cell(dash, 0, 12, "Objective", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 12, currentObjectiveText, text_color = marketDirectionColor, bgcolor = panelColor, text_size = size.tiny)
+
+            table.cell(dash, 0, 13, "Next Event", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 13, expectedNextEventText, text_color = marketDirectionColor, bgcolor = panelColor, text_size = size.tiny)
  
 //=============================================================================
 // 16. ALERTS
