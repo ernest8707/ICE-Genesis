@@ -1,6 +1,6 @@
 //@version=6
 indicator(
-     "ICE Genesis v1.0 - IFA PR9",
+     "ICE Genesis v1.0 - IFA PR10",
 shorttitle = "ICEGen",     overlay = true,
      max_labels_count = 250,
      max_lines_count = 200,
@@ -541,9 +541,9 @@ londonShade = color.new(color.rgb(35, 95, 180), 91)
 newYorkShade = color.new(color.rgb(130, 70, 170), 91)
 
 //=============================================================================
-// 2A. CHART READABILITY LABEL TEXT — PR9 / ZIG ZAG PR3 / IFA PR9
+// 2A. CHART READABILITY LABEL TEXT — PR9 / ZIG ZAG PR3 / IFA PR10
 // Centralized label text for Full / Short / Minimal chart display modes.
-// IFA PR9 preserves PR8 footprint summary and adds the institutional footprint permission gate.
+// IFA PR10 preserves the PR9 permission gate and adds non-repeating permission alerts.
 //=============================================================================
 labelModeFull = chartLabelMode == "Full"
 labelModeShort = chartLabelMode == "Short"
@@ -1616,7 +1616,7 @@ zigZagDashboardText = not showZigZag ? "Off" :
 zigZagDashboardColor = not showZigZag ? neutralColor : zigZagTrendColor
 
 //=============================================================================
-// 11C. INSTITUTIONAL FOOTPRINT ALIGNMENT ENGINE — PR1 / PR2 / PR3 / PR5 / PR6 / PR7 / PR8 / PR9
+// 11C. INSTITUTIONAL FOOTPRINT ALIGNMENT ENGINE — PR1 / PR2 / PR3 / PR5 / PR6 / PR7 / PR8 / PR9 / PR10
 // PR1 adds a Zig Zag structure gate for BOS / CHoCH quality.
 // PR2 separates normal BOS / CHoCH events from institutional-quality structure
 // events by requiring the Zig Zag gate, liquidity context, displacement, and
@@ -1627,7 +1627,8 @@ zigZagDashboardColor = not showZigZag ? neutralColor : zigZagTrendColor
 // PR6 adds liquidity void / imbalance alignment quality.
 // PR7 adds bullish / bearish Judas swing detection.
 // PR8 adds a final institutional footprint summary.
-// PR9 adds a footprint permission gate. BUY / SELL logic is not changed.
+// PR9 adds a footprint permission gate.
+// PR10 adds non-repeating footprint permission alerts. BUY / SELL logic is not changed.
 //=============================================================================
 ifaBullZigZagGate = enableInstitutionalFootprintAlignment and showZigZag and
      (zigZagBullStructure or (ifaAllowTransitionStructure and zigZagTransitionStructure))
@@ -2146,9 +2147,10 @@ ifaFootprintSummaryColor = not enableInstitutionalFootprintAlignment ? neutralCo
      ifaBearFootprintStrong or ifaBearFootprintBuilding ? bearColor :
      ifaMaxFootprintScore > 0 ? liqColor : neutralColor
 
-// IFA PR9 — Institutional Footprint Permission Gate.
+// IFA PR9 / PR10 — Institutional Footprint Permission Gate.
 // This is a dashboard/state layer only. It does not change BUY / SELL logic.
 // Permission requires the full IFA stack to be aligned and the protected guard to remain intact.
+// PR10 adds non-repeating alerts when bullish or bearish permission first becomes active.
 ifaBullStructureQualityFresh = ifaQualityFresh and ifaLastQualityDirection == 1 and str.contains(ifaLastQualityText, "Quality Bull")
 ifaBearStructureQualityFresh = ifaQualityFresh and ifaLastQualityDirection == -1 and str.contains(ifaLastQualityText, "Quality Bear")
 
@@ -2175,6 +2177,11 @@ institutionalBearFootprintPermission = enableInstitutionalFootprintAlignment and
 
 institutionalFootprintPermission = institutionalBullFootprintPermission or institutionalBearFootprintPermission
 institutionalFootprintPermissionDirection = institutionalBullFootprintPermission ? 1 : institutionalBearFootprintPermission ? -1 : 0
+
+// IFA PR10 alert signals.
+// These fire only on the first candle permission becomes active.
+institutionalBullFootprintPermissionSignal = institutionalBullFootprintPermission and not (institutionalBullFootprintPermission[1] == true)
+institutionalBearFootprintPermissionSignal = institutionalBearFootprintPermission and not (institutionalBearFootprintPermission[1] == true)
 
 ifaBullPermissionMissingText = not ifaBullZigZagGate ? "Need Bull ZZ Gate" :
      not ifaBullStructureQualityFresh ? "Need Bull Structure Quality" :
@@ -3243,7 +3250,7 @@ if barstate.islast
 
         if isMorningBrief
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 IFA PR9", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 IFA PR10", text_color = color.white, bgcolor = panelColor, text_size = size.small)
             table.cell(dash, 0, 1, "MORNING BRIEF", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 1, "", bgcolor = color.new(color.black, 0))
 
@@ -3276,7 +3283,7 @@ if barstate.islast
 
         else if isExecutionFocus
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 IFA PR9", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 IFA PR10", text_color = color.white, bgcolor = panelColor, text_size = size.small)
             table.cell(dash, 0, 1, "EXECUTION FOCUS", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 1, lastDecision, text_color = decisionColor, bgcolor = color.new(color.black, 0), text_size = size.large)
 
@@ -3348,7 +3355,7 @@ if barstate.islast
 
         else if isTradeManagement
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 IFA PR9", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 IFA PR10", text_color = color.white, bgcolor = panelColor, text_size = size.small)
             table.cell(dash, 0, 1, "TRADE MANAGEMENT", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 1, lastPlanDirection, text_color = lastPlanDirection == "LONG" ? bullColor : lastPlanDirection == "SHORT" ? bearColor : neutralColor, bgcolor = color.new(color.black, 0), text_size = size.large)
 
@@ -3375,7 +3382,7 @@ if barstate.islast
 
         else if isFull
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 IFA PR9", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 IFA PR10", text_color = color.white, bgcolor = panelColor, text_size = size.small)
 
             table.cell(dash, 0, 1, "FULL DASHBOARD", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 1, "", bgcolor = color.new(color.black, 0))
@@ -3454,5 +3461,7 @@ alertcondition(decisionLongSignal, "ICE Genesis: Decision BUY", "ICE Genesis Dec
 alertcondition(decisionShortSignal, "ICE Genesis: Decision SELL", "ICE Genesis Decision Engine confirmed a SELL setup on {{ticker}} {{interval}}.")
 alertcondition(executionBullEntryTriggerSignal, "ICE Genesis: Bullish confirmation-break entry trigger", "ICE Genesis Execution Engine confirmed a bullish confirmation-break entry trigger on {{ticker}} {{interval}}.")
 alertcondition(executionBearEntryTriggerSignal, "ICE Genesis: Bearish confirmation-break entry trigger", "ICE Genesis Execution Engine confirmed a bearish confirmation-break entry trigger on {{ticker}} {{interval}}.")
+alertcondition(institutionalBullFootprintPermissionSignal, "ICE Genesis: Bullish IFA permission", "ICE Genesis Institutional Footprint Alignment granted bullish footprint permission on {{ticker}} {{interval}}.")
+alertcondition(institutionalBearFootprintPermissionSignal, "ICE Genesis: Bearish IFA permission", "ICE Genesis Institutional Footprint Alignment granted bearish footprint permission on {{ticker}} {{interval}}.")
 alertcondition(sniperBearProtectedHighSweptNow, "ICE Genesis: Bearish protected high swept", "ICE Genesis Sniper Model detected a bearish protected high sweep / reset on {{ticker}} {{interval}}.")
 alertcondition(sniperBullProtectedLowSweptNow, "ICE Genesis: Bullish protected low swept", "ICE Genesis Sniper Model detected a bullish protected low sweep / reset on {{ticker}} {{interval}}.")
