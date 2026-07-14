@@ -1,6 +1,6 @@
 //@version=6
 indicator(
-     "ICE Genesis v1.0 - IFA PR10",
+     "ICE Genesis v1.0 - IFA PR11",
 shorttitle = "ICEGen",     overlay = true,
      max_labels_count = 250,
      max_lines_count = 200,
@@ -520,6 +520,12 @@ ifaRequireJudasForPermission = input.bool(
      group = groupIFA
 )
 
+requireIFAPermissionForDecision = input.bool(
+     false,
+     "Require IFA Permission for BUY / SELL",
+     group = groupIFA
+)
+
 showSmartTradePanel = input.bool(true, "Show smart trade planner in dashboard", group = groupVisual)
 asiaSession = input.session("1900-0200", "Asia session", group = groupTime)
 londonSession = input.session("0200-0500", "London session", group = groupTime)
@@ -541,9 +547,9 @@ londonShade = color.new(color.rgb(35, 95, 180), 91)
 newYorkShade = color.new(color.rgb(130, 70, 170), 91)
 
 //=============================================================================
-// 2A. CHART READABILITY LABEL TEXT — PR9 / ZIG ZAG PR3 / IFA PR10
+// 2A. CHART READABILITY LABEL TEXT — PR9 / ZIG ZAG PR3 / IFA PR11
 // Centralized label text for Full / Short / Minimal chart display modes.
-// IFA PR10 preserves the PR9 permission gate and adds non-repeating permission alerts.
+// IFA PR11 preserves PR10 permission alerts and adds an optional Decision Engine permission gate.
 //=============================================================================
 labelModeFull = chartLabelMode == "Full"
 labelModeShort = chartLabelMode == "Short"
@@ -1616,7 +1622,7 @@ zigZagDashboardText = not showZigZag ? "Off" :
 zigZagDashboardColor = not showZigZag ? neutralColor : zigZagTrendColor
 
 //=============================================================================
-// 11C. INSTITUTIONAL FOOTPRINT ALIGNMENT ENGINE — PR1 / PR2 / PR3 / PR5 / PR6 / PR7 / PR8 / PR9 / PR10
+// 11C. INSTITUTIONAL FOOTPRINT ALIGNMENT ENGINE — PR1 / PR2 / PR3 / PR5 / PR6 / PR7 / PR8 / PR9 / PR10 / PR11
 // PR1 adds a Zig Zag structure gate for BOS / CHoCH quality.
 // PR2 separates normal BOS / CHoCH events from institutional-quality structure
 // events by requiring the Zig Zag gate, liquidity context, displacement, and
@@ -1628,7 +1634,8 @@ zigZagDashboardColor = not showZigZag ? neutralColor : zigZagTrendColor
 // PR7 adds bullish / bearish Judas swing detection.
 // PR8 adds a final institutional footprint summary.
 // PR9 adds a footprint permission gate.
-// PR10 adds non-repeating footprint permission alerts. BUY / SELL logic is not changed.
+// PR10 adds non-repeating footprint permission alerts.
+// PR11 adds an optional BUY / SELL permission gate that is off by default.
 //=============================================================================
 ifaBullZigZagGate = enableInstitutionalFootprintAlignment and showZigZag and
      (zigZagBullStructure or (ifaAllowTransitionStructure and zigZagTransitionStructure))
@@ -2147,10 +2154,10 @@ ifaFootprintSummaryColor = not enableInstitutionalFootprintAlignment ? neutralCo
      ifaBearFootprintStrong or ifaBearFootprintBuilding ? bearColor :
      ifaMaxFootprintScore > 0 ? liqColor : neutralColor
 
-// IFA PR9 / PR10 — Institutional Footprint Permission Gate.
-// This is a dashboard/state layer only. It does not change BUY / SELL logic.
+// IFA PR9 / PR10 / PR11 — Institutional Footprint Permission Gate.
 // Permission requires the full IFA stack to be aligned and the protected guard to remain intact.
 // PR10 adds non-repeating alerts when bullish or bearish permission first becomes active.
+// PR11 optionally lets this permission layer gate BUY / SELL decisions when enabled.
 ifaBullStructureQualityFresh = ifaQualityFresh and ifaLastQualityDirection == 1 and str.contains(ifaLastQualityText, "Quality Bull")
 ifaBearStructureQualityFresh = ifaQualityFresh and ifaLastQualityDirection == -1 and str.contains(ifaLastQualityText, "Quality Bear")
 
@@ -2438,17 +2445,27 @@ decisionBearScore = (bearLiquidityState ? 20 : 0) +
      (bearHTFState ? 5 : 0)
 
 liquidityGateEnabled = requireSweepBeforeBOS or requireSweepBeforeMSS
+
+// IFA PR11 optional Decision Engine permission gate.
+// Default behavior is unchanged while Require IFA Permission for BUY / SELL is off.
+bullIFADecisionGate = not requireIFAPermissionForDecision or institutionalBullFootprintPermission
+bearIFADecisionGate = not requireIFAPermissionForDecision or institutionalBearFootprintPermission
+ifaBullDecisionBlocked = requireIFAPermissionForDecision and not institutionalBullFootprintPermission
+ifaBearDecisionBlocked = requireIFAPermissionForDecision and not institutionalBearFootprintPermission
+
 bullMandatoryReady = bullStructureState and bullDisplacementState and bullOBState and
      (not liquidityGateEnabled or bullLiquidityState) and
      (not requireFVGForSetup or bullFVGState) and
      (not requireOTEForDecision or bullOTEState) and
-     (not requireHTFForDecision or bullHTFState)
+     (not requireHTFForDecision or bullHTFState) and
+     bullIFADecisionGate
 
 bearMandatoryReady = bearStructureState and bearDisplacementState and bearOBState and
      (not liquidityGateEnabled or bearLiquidityState) and
      (not requireFVGForSetup or bearFVGState) and
      (not requireOTEForDecision or bearOTEState) and
-     (not requireHTFForDecision or bearHTFState)
+     (not requireHTFForDecision or bearHTFState) and
+     bearIFADecisionGate
 
 scoreSeparation = math.abs(decisionBullScore - decisionBearScore)
 bothScoresHigh = decisionBullScore >= minimumScore and decisionBearScore >= minimumScore
@@ -2495,20 +2512,23 @@ else if decisionDirection == 1
          not bullOBState ? "WAIT FOR ORDER BLOCK" :
          requireFVGForSetup and not bullFVGState ? "WAIT FOR FVG" :
          requireOTEForDecision and not bullOTEState ? "WAIT FOR OTE" :
-         requireHTFForDecision and not bullHTFState ? "WAIT FOR HTF" : "PREPARING"
+         requireHTFForDecision and not bullHTFState ? "WAIT FOR HTF" :
+         ifaBullDecisionBlocked ? "WAIT FOR IFA PERMISSION" : "PREPARING"
     decisionMissing := liquidityGateEnabled and not bullLiquidityState ? "Sell-side liquidity sweep" :
          not bullDisplacementState ? "Bullish displacement" :
          not bullStructureState ? "Bullish BOS / CHoCH" :
          not bullOBState ? "Fresh bullish order block" :
          requireFVGForSetup and not bullFVGState ? "Active bullish FVG" :
          requireOTEForDecision and not bullOTEState ? "Bullish OTE retracement" :
-         requireHTFForDecision and not bullHTFState ? "Bullish HTF alignment" : "Score / separation threshold"
+         requireHTFForDecision and not bullHTFState ? "Bullish HTF alignment" :
+         ifaBullDecisionBlocked ? "Bullish IFA permission" : "Score / separation threshold"
     decisionStage := liquidityGateEnabled and not bullLiquidityState ? "LIQUIDITY" :
          not bullDisplacementState ? "DISPLACEMENT" :
          not bullStructureState ? "STRUCTURE" :
          not bullOBState ? "ORDER BLOCK" :
          requireFVGForSetup and not bullFVGState ? "FVG" :
-         requireOTEForDecision and not bullOTEState ? "OTE" : "ENTRY"
+         requireOTEForDecision and not bullOTEState ? "OTE" :
+         ifaBullDecisionBlocked ? "IFA" : "ENTRY"
 else if decisionDirection == -1
     decisionRecommendation := liquidityGateEnabled and not bearLiquidityState ? "WAIT FOR LIQUIDITY" :
          not bearDisplacementState ? "WAIT FOR DISPLACEMENT" :
@@ -2516,20 +2536,23 @@ else if decisionDirection == -1
          not bearOBState ? "WAIT FOR ORDER BLOCK" :
          requireFVGForSetup and not bearFVGState ? "WAIT FOR FVG" :
          requireOTEForDecision and not bearOTEState ? "WAIT FOR OTE" :
-         requireHTFForDecision and not bearHTFState ? "WAIT FOR HTF" : "PREPARING"
+         requireHTFForDecision and not bearHTFState ? "WAIT FOR HTF" :
+         ifaBearDecisionBlocked ? "WAIT FOR IFA PERMISSION" : "PREPARING"
     decisionMissing := liquidityGateEnabled and not bearLiquidityState ? "Buy-side liquidity sweep" :
          not bearDisplacementState ? "Bearish displacement" :
          not bearStructureState ? "Bearish BOS / CHoCH" :
          not bearOBState ? "Fresh bearish order block" :
          requireFVGForSetup and not bearFVGState ? "Active bearish FVG" :
          requireOTEForDecision and not bearOTEState ? "Bearish OTE retracement" :
-         requireHTFForDecision and not bearHTFState ? "Bearish HTF alignment" : "Score / separation threshold"
+         requireHTFForDecision and not bearHTFState ? "Bearish HTF alignment" :
+         ifaBearDecisionBlocked ? "Bearish IFA permission" : "Score / separation threshold"
     decisionStage := liquidityGateEnabled and not bearLiquidityState ? "LIQUIDITY" :
          not bearDisplacementState ? "DISPLACEMENT" :
          not bearStructureState ? "STRUCTURE" :
          not bearOBState ? "ORDER BLOCK" :
          requireFVGForSetup and not bearFVGState ? "FVG" :
-         requireOTEForDecision and not bearOTEState ? "OTE" : "ENTRY"
+         requireOTEForDecision and not bearOTEState ? "OTE" :
+         ifaBearDecisionBlocked ? "IFA" : "ENTRY"
 
 decisionLongSignal = decisionLongReady and not decisionLongReady[1]
 decisionShortSignal = decisionShortReady and not decisionShortReady[1]
@@ -2552,7 +2575,9 @@ decisionNextStep = decisionLongReady ? "Execute only under your trade plan" :
      decisionDirection == 1 and requireOTEForDecision and not bullOTEState ? "Wait for bullish OTE retracement" :
      decisionDirection == -1 and requireOTEForDecision and not bearOTEState ? "Wait for bearish OTE retracement" :
      decisionDirection == 1 and requireHTFForDecision and not bullHTFState ? "Wait for bullish HTF alignment" :
-     decisionDirection == -1 and requireHTFForDecision and not bearHTFState ? "Wait for bearish HTF alignment" : "Wait for stronger confirmation"
+     decisionDirection == -1 and requireHTFForDecision and not bearHTFState ? "Wait for bearish HTF alignment" :
+     decisionDirection == 1 and ifaBullDecisionBlocked ? "Wait for bullish IFA permission" :
+     decisionDirection == -1 and ifaBearDecisionBlocked ? "Wait for bearish IFA permission" : "Wait for stronger confirmation"
 
 decisionStory = decisionConflict ? decisionMissing :
      decisionLongReady ? "Bullish setup is fully confirmed" :
@@ -2619,6 +2644,8 @@ currentObjectiveText = decisionLongReady or decisionShortReady ? "Execute Trade 
      decisionDirection == -1 and requireFVGForSetup and not bearFVGState ? "Fill Bearish FVG" :
      decisionDirection == 1 and requireOTEForDecision and not bullOTEState ? "Reach Bullish OTE" :
      decisionDirection == -1 and requireOTEForDecision and not bearOTEState ? "Reach Bearish OTE" :
+     decisionDirection == 1 and ifaBullDecisionBlocked ? "Confirm Bullish IFA Permission" :
+     decisionDirection == -1 and ifaBearDecisionBlocked ? "Confirm Bearish IFA Permission" :
      "Wait for Directional Clarity"
 
 expectedNextEventText = decisionLongReady or decisionShortReady ? "Manage Trade Plan" :
@@ -2629,6 +2656,7 @@ expectedNextEventText = decisionLongReady or decisionShortReady ? "Manage Trade 
      decisionStage == "ORDER BLOCK" ? (decisionDirection == 1 ? "Bullish OB Retest" : "Bearish OB Retest") :
      decisionStage == "FVG" ? (decisionDirection == 1 ? "Bullish FVG" : "Bearish FVG") :
      decisionStage == "OTE" ? "OTE Retracement" :
+     decisionStage == "IFA" ? (decisionDirection == 1 ? "Bullish IFA Permission" : decisionDirection == -1 ? "Bearish IFA Permission" : "IFA Permission") :
      decisionStage == "ENTRY" ? (requireConfirmationBreakForEntry ? "Break Confirmation Candle" : "Entry Confirmation") : "Stronger Confirmation"
 
 marketBriefingText = decisionLongReady ? "BUY active. Manage plan. Avoid shorts." :
@@ -2646,6 +2674,8 @@ marketBriefingText = decisionLongReady ? "BUY active. Manage plan. Avoid shorts.
      decisionDirection == -1 and requireFVGForSetup and not bearFVGState ? "Bearish build. Need FVG." :
      decisionDirection == 1 and requireOTEForDecision and not bullOTEState ? "Bullish build. Need OTE." :
      decisionDirection == -1 and requireOTEForDecision and not bearOTEState ? "Bearish build. Need OTE." :
+     decisionDirection == 1 and ifaBullDecisionBlocked ? "Bullish build. Need IFA permission." :
+     decisionDirection == -1 and ifaBearDecisionBlocked ? "Bearish build. Need IFA permission." :
      "No clean story. Wait."
 
 //=============================================================================
@@ -3250,7 +3280,7 @@ if barstate.islast
 
         if isMorningBrief
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 IFA PR10", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 IFA PR11", text_color = color.white, bgcolor = panelColor, text_size = size.small)
             table.cell(dash, 0, 1, "MORNING BRIEF", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 1, "", bgcolor = color.new(color.black, 0))
 
@@ -3283,7 +3313,7 @@ if barstate.islast
 
         else if isExecutionFocus
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 IFA PR10", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 IFA PR11", text_color = color.white, bgcolor = panelColor, text_size = size.small)
             table.cell(dash, 0, 1, "EXECUTION FOCUS", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 1, lastDecision, text_color = decisionColor, bgcolor = color.new(color.black, 0), text_size = size.large)
 
@@ -3355,7 +3385,7 @@ if barstate.islast
 
         else if isTradeManagement
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 IFA PR10", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 IFA PR11", text_color = color.white, bgcolor = panelColor, text_size = size.small)
             table.cell(dash, 0, 1, "TRADE MANAGEMENT", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 1, lastPlanDirection, text_color = lastPlanDirection == "LONG" ? bullColor : lastPlanDirection == "SHORT" ? bearColor : neutralColor, bgcolor = color.new(color.black, 0), text_size = size.large)
 
@@ -3382,7 +3412,7 @@ if barstate.islast
 
         else if isFull
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 IFA PR10", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 IFA PR11", text_color = color.white, bgcolor = panelColor, text_size = size.small)
 
             table.cell(dash, 0, 1, "FULL DASHBOARD", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 1, "", bgcolor = color.new(color.black, 0))
