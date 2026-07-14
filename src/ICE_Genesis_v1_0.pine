@@ -1,6 +1,6 @@
 //@version=6
 indicator(
-     "ICE Genesis v1.0 - Execution Engine PR7",
+     "ICE Genesis v1.0 - Sniper PR1",
 shorttitle = "ICEGen",     overlay = true,
      max_labels_count = 250,
      max_lines_count = 200,
@@ -35,6 +35,7 @@ groupVisual    = "9. Visuals"
 groupDashboard = "10. Adaptive Dashboard"
 groupInstitutionalBias = "11. Institutional Bias"
 groupExecution = "12. Execution Engine"
+groupSniper    = "13. Sniper Model Engine"
 showDashboard = input.bool(true, "Show dashboard", group = groupCore)
 dashboardMode = input.string("Execution", "Dashboard mode", options = ["Full", "Morning Brief", "Execution", "Trade Management", "Compact", "Minimal", "Off"], group = groupDashboard)
 enableInstitutionalBias = input.bool(
@@ -171,6 +172,31 @@ confirmationBreakMemoryBars = input.int(
      minval = 1,
      maxval = 50,
      group = groupExecution
+)
+
+enableSniperModel = input.bool(
+     true,
+     "Enable Sniper Model Engine",
+     group = groupSniper
+)
+
+showSniperDebug = input.bool(
+     false,
+     "Show Sniper Debug Values",
+     group = groupSniper
+)
+
+showSniperProtectedLevels = input.bool(
+     false,
+     "Show protected high / low",
+     group = groupSniper
+)
+
+protectedLevelBreakMode = input.string(
+     "Wick Sweep",
+     "Protected level break mode",
+     options = ["Wick Sweep", "Close Break"],
+     group = groupSniper
 )
 
 minimumScore    = input.int(75, "Minimum setup score", minval = 0, maxval = 100, step = 5, group = groupCore)
@@ -319,9 +345,9 @@ londonShade = color.new(color.rgb(35, 95, 180), 91)
 newYorkShade = color.new(color.rgb(130, 70, 170), 91)
 
 //=============================================================================
-// 2A. CHART READABILITY LABEL TEXT — PR9 / EXEC PR7
+// 2A. CHART READABILITY LABEL TEXT — PR9 / SNIPER PR1
 // Centralized label text for Full / Short / Minimal chart display modes.
-// PR7 preserves clean defaults and adds confirmation-break entry-trigger labeling.
+// Sniper PR1 preserves PR7 execution behavior and adds protected-level tracking.
 //=============================================================================
 labelModeFull = chartLabelMode == "Full"
 labelModeShort = chartLabelMode == "Short"
@@ -392,9 +418,9 @@ executionClose = request.security(
 )
 
 // Temporary verification values. These appear only in TradingView's Data Window.
-plot(showBiasDebug ? anchorClose : na, "Anchor Bias Confirmed Close", display = display.data_window)
-plot(showBiasDebug ? trendClose : na, "Trend Bias Confirmed Close", display = display.data_window)
-plot(showBiasDebug ? executionClose : na, "Execution Bias Confirmed Close", display = display.data_window)
+// Disabled debug data-window plot to stay under TradingView 64-plot limit: plot(showBiasDebug ? anchorClose : na, "Anchor Bias Confirmed Close", display = display.data_window)
+// Disabled debug data-window plot to stay under TradingView 64-plot limit: plot(showBiasDebug ? trendClose : na, "Trend Bias Confirmed Close", display = display.data_window)
+// Disabled debug data-window plot to stay under TradingView 64-plot limit: plot(showBiasDebug ? executionClose : na, "Execution Bias Confirmed Close", display = display.data_window)
 
 //=============================================================================
 // 4. HIGHER-TIMEFRAME BIAS
@@ -816,6 +842,93 @@ else if internalBearBOS
 bullStructureEvent = internalBullCHoCH or internalBullBOS or externalBullCHoCH or externalBullBOS
 bearStructureEvent = internalBearCHoCH or internalBearBOS or externalBearCHoCH or externalBearBOS
 externalStructureEvent = externalBullCHoCH or externalBearCHoCH or externalBullBOS or externalBearBOS
+
+//=============================================================================
+// 8A. SNIPER MODEL ENGINE PR1 — PROTECTED LEVEL TRACKER
+// Tracks the protected high for bearish sniper setups and the protected low for
+// bullish sniper setups. Internal liquidity sweeps can remain valid, but a sweep
+// of the protected level invalidates / resets the sniper setup.
+//=============================================================================
+protectedHighBroken(float level) =>
+    not na(level) and (protectedLevelBreakMode == "Close Break" ? close > level : high > level)
+
+protectedLowBroken(float level) =>
+    not na(level) and (protectedLevelBreakMode == "Close Break" ? close < level : low < level)
+
+float newBearProtectedHigh = not na(lastExtHigh) ? lastExtHigh : lastIntHigh
+int newBearProtectedHighBar = not na(lastExtHigh) ? lastExtHighBar : lastIntHighBar
+float newBullProtectedLow = not na(lastExtLow) ? lastExtLow : lastIntLow
+int newBullProtectedLowBar = not na(lastExtLow) ? lastExtLowBar : lastIntLowBar
+
+var float sniperProtectedHigh = na
+var float sniperProtectedLow = na
+var int sniperProtectedHighBar = na
+var int sniperProtectedLowBar = na
+var int sniperProtectedHighSetBar = na
+var int sniperProtectedLowSetBar = na
+var bool sniperBearProtectedHighActive = false
+var bool sniperBullProtectedLowActive = false
+var bool sniperBearSetupInvalidated = false
+var bool sniperBullSetupInvalidated = false
+var string lastSniperInvalidationText = "None"
+
+if enableSniperModel and bearStructureEvent and not na(newBearProtectedHigh)
+    sniperProtectedHigh := newBearProtectedHigh
+    sniperProtectedHighBar := newBearProtectedHighBar
+    sniperProtectedHighSetBar := bar_index
+    sniperBearProtectedHighActive := true
+    sniperBearSetupInvalidated := false
+    lastSniperInvalidationText := "Bear protected high armed"
+
+if enableSniperModel and bullStructureEvent and not na(newBullProtectedLow)
+    sniperProtectedLow := newBullProtectedLow
+    sniperProtectedLowBar := newBullProtectedLowBar
+    sniperProtectedLowSetBar := bar_index
+    sniperBullProtectedLowActive := true
+    sniperBullSetupInvalidated := false
+    lastSniperInvalidationText := "Bull protected low armed"
+
+sniperBearProtectedHighSweptNow = enableSniperModel and sniperBearProtectedHighActive and not na(sniperProtectedHigh) and
+     not na(sniperProtectedHighSetBar) and bar_index > sniperProtectedHighSetBar and protectedHighBroken(sniperProtectedHigh)
+
+sniperBullProtectedLowSweptNow = enableSniperModel and sniperBullProtectedLowActive and not na(sniperProtectedLow) and
+     not na(sniperProtectedLowSetBar) and bar_index > sniperProtectedLowSetBar and protectedLowBroken(sniperProtectedLow)
+
+if sniperBearProtectedHighSweptNow
+    sniperBearProtectedHighActive := false
+    sniperBearSetupInvalidated := true
+    lastSniperInvalidationText := "Bear protected high swept"
+
+if sniperBullProtectedLowSweptNow
+    sniperBullProtectedLowActive := false
+    sniperBullSetupInvalidated := true
+    lastSniperInvalidationText := "Bull protected low swept"
+
+sniperProtectedHighText = not na(sniperProtectedHigh) ? str.tostring(sniperProtectedHigh, format.mintick) : "—"
+sniperProtectedLowText = not na(sniperProtectedLow) ? str.tostring(sniperProtectedLow, format.mintick) : "—"
+
+sniperBearGuardText = sniperBearSetupInvalidated ? "Bear PH swept / reset" :
+     sniperBearProtectedHighActive ? "Bear PH intact @ " + sniperProtectedHighText : "Bear PH waiting"
+
+sniperBullGuardText = sniperBullSetupInvalidated ? "Bull PL swept / reset" :
+     sniperBullProtectedLowActive ? "Bull PL intact @ " + sniperProtectedLowText : "Bull PL waiting"
+
+sniperProtectedGuardText = orderFlow == -1 ? sniperBearGuardText :
+     orderFlow == 1 ? sniperBullGuardText :
+     sniperBearProtectedHighActive ? sniperBearGuardText :
+     sniperBullProtectedLowActive ? sniperBullGuardText : "Protected level waiting"
+
+sniperProtectedGuardColor = str.contains(sniperProtectedGuardText, "swept") ? bearColor :
+     str.contains(sniperProtectedGuardText, "intact") ? bullColor : neutralColor
+
+plot(showSniperProtectedLevels and enableSniperModel ? sniperProtectedHigh : na, "Sniper Protected High", color = color.new(bearColor, 20), style = plot.style_linebr)
+plot(showSniperProtectedLevels and enableSniperModel ? sniperProtectedLow : na, "Sniper Protected Low", color = color.new(bullColor, 20), style = plot.style_linebr)
+// Disabled debug data-window plot to stay under TradingView 64-plot limit: plot(showSniperDebug ? sniperProtectedHigh : na, "Sniper Protected High Value", display = display.data_window)
+// Disabled debug data-window plot to stay under TradingView 64-plot limit: plot(showSniperDebug ? sniperProtectedLow : na, "Sniper Protected Low Value", display = display.data_window)
+// Disabled debug data-window plot to stay under TradingView 64-plot limit: plot(showSniperDebug ? (sniperBearProtectedHighSweptNow ? 1 : 0) : na, "Sniper Bear Protected High Swept", display = display.data_window)
+// Disabled debug data-window plot to stay under TradingView 64-plot limit: plot(showSniperDebug ? (sniperBullProtectedLowSweptNow ? 1 : 0) : na, "Sniper Bull Protected Low Swept", display = display.data_window)
+// Disabled debug data-window plot to stay under TradingView 64-plot limit: plot(showSniperDebug ? (sniperBearProtectedHighActive ? 1 : 0) : na, "Sniper Bear Protected High Active", display = display.data_window)
+// Disabled debug data-window plot to stay under TradingView 64-plot limit: plot(showSniperDebug ? (sniperBullProtectedLowActive ? 1 : 0) : na, "Sniper Bull Protected Low Active", display = display.data_window)
 
 //=============================================================================
 // 9. ORDER BLOCK / FVG CANDIDATES
@@ -1389,6 +1502,7 @@ marketBriefingText = decisionLongReady ? "BUY active. Manage plan. Avoid shorts.
 // 13B. EXECUTION ENGINE — PR7
 // Tracks retests, confirmation candles, confirmation-candle break triggers,
 // entry-trigger locks, and de-duplicated visual markers without changing BUY / SELL logic.
+// Plot-count fix: debug data-window plots are disabled so the script stays under TradingView's 64-plot limit.
 //=============================================================================
 executionZoneOverlap(float zoneTop, float zoneBottom) =>
     not na(zoneTop) and not na(zoneBottom) and high >= zoneBottom and low <= zoneTop
@@ -1601,17 +1715,17 @@ executionEntryPermissionValue = executionEntryPermissionText == "Long Trigger" ?
      executionEntryPermissionText == "Confirmation Ready" ? 1 :
      executionEntryPermissionText == "Entry Used / Locked" ? 0.5 : 0
 
-plot(showExecutionDebug ? (executionDirectionalOBRetest ? 1 : 0) : na, "Execution OB Retest", display = display.data_window)
-plot(showExecutionDebug ? (executionDirectionalFVGRetest ? 1 : 0) : na, "Execution FVG Retest", display = display.data_window)
-plot(showExecutionDebug ? (executionDirectionalConfirmation ? 1 : 0) : na, "Execution Confirmation", display = display.data_window)
-plot(showExecutionDebug ? (executionBreakArmed ? 1 : 0) : na, "Execution Confirmation Break Armed", display = display.data_window)
-plot(showExecutionDebug ? (bullConfirmationBreakCandidate ? 1 : bearConfirmationBreakCandidate ? -1 : 0) : na, "Execution Confirmation Break Candidate", display = display.data_window)
-plot(showExecutionDebug and requireConfirmationBreakForEntry ? bullEntryConfirmationHigh : na, "Bullish confirmation break high", display = display.data_window)
-plot(showExecutionDebug and requireConfirmationBreakForEntry ? bearEntryConfirmationLow : na, "Bearish confirmation break low", display = display.data_window)
-plot(showExecutionDebug ? executionStatusValue : na, "Execution Status Value", display = display.data_window)
-plot(showExecutionDebug ? executionEntryPermissionValue : na, "Execution Entry Permission", display = display.data_window)
-plot(showExecutionDebug ? (executionBullEntryTriggerSignal ? 1 : executionBearEntryTriggerSignal ? -1 : 0) : na, "Execution Entry Trigger Signal", display = display.data_window)
-plot(showExecutionDebug ? (executionCurrentZoneLocked ? 1 : 0) : na, "Execution Entry Zone Locked", display = display.data_window)
+// Disabled debug data-window plot to stay under TradingView 64-plot limit: plot(showExecutionDebug ? (executionDirectionalOBRetest ? 1 : 0) : na, "Execution OB Retest", display = display.data_window)
+// Disabled debug data-window plot to stay under TradingView 64-plot limit: plot(showExecutionDebug ? (executionDirectionalFVGRetest ? 1 : 0) : na, "Execution FVG Retest", display = display.data_window)
+// Disabled debug data-window plot to stay under TradingView 64-plot limit: plot(showExecutionDebug ? (executionDirectionalConfirmation ? 1 : 0) : na, "Execution Confirmation", display = display.data_window)
+// Disabled debug data-window plot to stay under TradingView 64-plot limit: plot(showExecutionDebug ? (executionBreakArmed ? 1 : 0) : na, "Execution Confirmation Break Armed", display = display.data_window)
+// Disabled debug data-window plot to stay under TradingView 64-plot limit: plot(showExecutionDebug ? (bullConfirmationBreakCandidate ? 1 : bearConfirmationBreakCandidate ? -1 : 0) : na, "Execution Confirmation Break Candidate", display = display.data_window)
+// Disabled debug data-window plot to stay under TradingView 64-plot limit: plot(showExecutionDebug and requireConfirmationBreakForEntry ? bullEntryConfirmationHigh : na, "Bullish confirmation break high", display = display.data_window)
+// Disabled debug data-window plot to stay under TradingView 64-plot limit: plot(showExecutionDebug and requireConfirmationBreakForEntry ? bearEntryConfirmationLow : na, "Bearish confirmation break low", display = display.data_window)
+// Disabled debug data-window plot to stay under TradingView 64-plot limit: plot(showExecutionDebug ? executionStatusValue : na, "Execution Status Value", display = display.data_window)
+// Disabled debug data-window plot to stay under TradingView 64-plot limit: plot(showExecutionDebug ? executionEntryPermissionValue : na, "Execution Entry Permission", display = display.data_window)
+// Disabled debug data-window plot to stay under TradingView 64-plot limit: plot(showExecutionDebug ? (executionBullEntryTriggerSignal ? 1 : executionBearEntryTriggerSignal ? -1 : 0) : na, "Execution Entry Trigger Signal", display = display.data_window)
+// Disabled debug data-window plot to stay under TradingView 64-plot limit: plot(showExecutionDebug ? (executionCurrentZoneLocked ? 1 : 0) : na, "Execution Entry Zone Locked", display = display.data_window)
 
 // PR8 visual de-duplication.
 // Execution states still update normally; only repeated chart markers are filtered.
@@ -1655,10 +1769,10 @@ if executionBearConfirmationMarkerSignal
     lastBearConfirmationMarkerBar := bar_index
     lastBearConfirmationMarkerZoneBar := activeZoneCreatedBar
 
-plot(showExecutionDebug ? (executionBullRetestMarkerSignal ? 1 : 0) : na, "Bullish execution retest marker allowed", display = display.data_window)
-plot(showExecutionDebug ? (executionBearRetestMarkerSignal ? 1 : 0) : na, "Bearish execution retest marker allowed", display = display.data_window)
-plot(showExecutionDebug ? (executionBullConfirmationMarkerSignal ? 1 : 0) : na, "Bullish execution confirmation marker allowed", display = display.data_window)
-plot(showExecutionDebug ? (executionBearConfirmationMarkerSignal ? 1 : 0) : na, "Bearish execution confirmation marker allowed", display = display.data_window)
+// Disabled debug data-window plot to stay under TradingView 64-plot limit: plot(showExecutionDebug ? (executionBullRetestMarkerSignal ? 1 : 0) : na, "Bullish execution retest marker allowed", display = display.data_window)
+// Disabled debug data-window plot to stay under TradingView 64-plot limit: plot(showExecutionDebug ? (executionBearRetestMarkerSignal ? 1 : 0) : na, "Bearish execution retest marker allowed", display = display.data_window)
+// Disabled debug data-window plot to stay under TradingView 64-plot limit: plot(showExecutionDebug ? (executionBullConfirmationMarkerSignal ? 1 : 0) : na, "Bullish execution confirmation marker allowed", display = display.data_window)
+// Disabled debug data-window plot to stay under TradingView 64-plot limit: plot(showExecutionDebug ? (executionBearConfirmationMarkerSignal ? 1 : 0) : na, "Bearish execution confirmation marker allowed", display = display.data_window)
 
 plotshape(showExecutionRetestMarkers and visualMode != "Minimal" and (labelModeFull or labelModeShort) and executionBullRetestMarkerSignal, "Bullish execution retest marker RT", shape.circle, location.belowbar, bullColor, size = size.tiny, text = "RT", textcolor = color.white)
 plotshape(showExecutionRetestMarkers and visualMode != "Minimal" and (labelModeFull or labelModeShort) and executionBearRetestMarkerSignal, "Bearish execution retest marker RT", shape.circle, location.abovebar, bearColor, size = size.tiny, text = "RT", textcolor = color.white)
@@ -1827,7 +1941,7 @@ if barstate.islast
 
         if isMorningBrief
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 EXEC PR7", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 SNIPER PR1", text_color = color.white, bgcolor = panelColor, text_size = size.small)
             table.cell(dash, 0, 1, "MORNING BRIEF", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 1, "", bgcolor = color.new(color.black, 0))
 
@@ -1860,7 +1974,7 @@ if barstate.islast
 
         else if isExecutionFocus
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 EXEC PR7", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 SNIPER PR1", text_color = color.white, bgcolor = panelColor, text_size = size.small)
             table.cell(dash, 0, 1, "EXECUTION FOCUS", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 1, lastDecision, text_color = decisionColor, bgcolor = color.new(color.black, 0), text_size = size.large)
 
@@ -1885,21 +1999,24 @@ if barstate.islast
             table.cell(dash, 0, 8, "Entry Permission", text_color = neutralColor, bgcolor = panelColor)
             table.cell(dash, 1, 8, executionEntryPermissionText, text_color = executionEntryPermissionColor, bgcolor = panelColor)
 
-            table.cell(dash, 0, 9, "OTE / HTF", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 9, (dashboardOTE ? "OTE OK" : "OTE ...") + " / " + biasText, text_color = dashboardOTE ? bullColor : neutralColor, bgcolor = panelColor, text_size = size.tiny)
+            table.cell(dash, 0, 9, "Protected Guard", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 9, sniperProtectedGuardText, text_color = sniperProtectedGuardColor, bgcolor = panelColor, text_size = size.tiny)
 
-            table.cell(dash, 0, 10, "Objective", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 10, currentObjectiveText, text_color = marketDirectionColor, bgcolor = panelColor, text_size = size.tiny)
+            table.cell(dash, 0, 10, "OTE / HTF", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 10, (dashboardOTE ? "OTE OK" : "OTE ...") + " / " + biasText, text_color = dashboardOTE ? bullColor : neutralColor, bgcolor = panelColor, text_size = size.tiny)
 
-            table.cell(dash, 0, 11, "Next Event", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 11, expectedNextEventText, text_color = marketDirectionColor, bgcolor = panelColor, text_size = size.tiny)
+            table.cell(dash, 0, 11, "Objective", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 11, currentObjectiveText, text_color = marketDirectionColor, bgcolor = panelColor, text_size = size.tiny)
 
-            table.cell(dash, 0, 12, "Briefing", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 12, marketBriefingText, text_color = marketDirectionColor, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 0, 12, "Next Event", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 12, expectedNextEventText, text_color = marketDirectionColor, bgcolor = panelColor, text_size = size.tiny)
+
+            table.cell(dash, 0, 13, "Briefing", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 13, marketBriefingText, text_color = marketDirectionColor, bgcolor = panelColor, text_size = size.small)
 
         else if isTradeManagement
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 EXEC PR7", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 SNIPER PR1", text_color = color.white, bgcolor = panelColor, text_size = size.small)
             table.cell(dash, 0, 1, "TRADE MANAGEMENT", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 1, lastPlanDirection, text_color = lastPlanDirection == "LONG" ? bullColor : lastPlanDirection == "SHORT" ? bearColor : neutralColor, bgcolor = color.new(color.black, 0), text_size = size.large)
 
@@ -1926,7 +2043,7 @@ if barstate.islast
 
         else if isFull
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 EXEC PR7", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 SNIPER PR1", text_color = color.white, bgcolor = panelColor, text_size = size.small)
 
             table.cell(dash, 0, 1, "FULL DASHBOARD", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 1, "", bgcolor = color.new(color.black, 0))
@@ -1949,11 +2066,14 @@ if barstate.islast
             table.cell(dash, 0, 7, "Entry Permission", text_color = neutralColor, bgcolor = panelColor)
             table.cell(dash, 1, 7, executionEntryPermissionText, text_color = executionEntryPermissionColor, bgcolor = panelColor)
 
-            table.cell(dash, 0, 8, "Objective", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 8, currentObjectiveText, text_color = marketDirectionColor, bgcolor = panelColor, text_size = size.tiny)
+            table.cell(dash, 0, 8, "Protected Guard", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 8, sniperProtectedGuardText, text_color = sniperProtectedGuardColor, bgcolor = panelColor, text_size = size.tiny)
 
-            table.cell(dash, 0, 9, "Next Event", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 9, expectedNextEventText, text_color = marketDirectionColor, bgcolor = panelColor, text_size = size.tiny)
+            table.cell(dash, 0, 9, "Objective", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 9, currentObjectiveText, text_color = marketDirectionColor, bgcolor = panelColor, text_size = size.tiny)
+
+            table.cell(dash, 0, 10, "Next Event", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 10, expectedNextEventText, text_color = marketDirectionColor, bgcolor = panelColor, text_size = size.tiny)
  
 //=============================================================================
 // 16. ALERTS
@@ -1972,3 +2092,5 @@ alertcondition(decisionLongSignal, "ICE Genesis: Decision BUY", "ICE Genesis Dec
 alertcondition(decisionShortSignal, "ICE Genesis: Decision SELL", "ICE Genesis Decision Engine confirmed a SELL setup on {{ticker}} {{interval}}.")
 alertcondition(executionBullEntryTriggerSignal, "ICE Genesis: Bullish confirmation-break entry trigger", "ICE Genesis Execution Engine confirmed a bullish confirmation-break entry trigger on {{ticker}} {{interval}}.")
 alertcondition(executionBearEntryTriggerSignal, "ICE Genesis: Bearish confirmation-break entry trigger", "ICE Genesis Execution Engine confirmed a bearish confirmation-break entry trigger on {{ticker}} {{interval}}.")
+alertcondition(sniperBearProtectedHighSweptNow, "ICE Genesis: Bearish protected high swept", "ICE Genesis Sniper Model detected a bearish protected high sweep / reset on {{ticker}} {{interval}}.")
+alertcondition(sniperBullProtectedLowSweptNow, "ICE Genesis: Bullish protected low swept", "ICE Genesis Sniper Model detected a bullish protected low sweep / reset on {{ticker}} {{interval}}.")
