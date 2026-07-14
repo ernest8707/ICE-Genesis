@@ -1,6 +1,6 @@
 //@version=6
 indicator(
-     "ICE Genesis v1.0 - Execution Engine PR6",
+     "ICE Genesis v1.0 - Execution Engine PR7",
 shorttitle = "ICEGen",     overlay = true,
      max_labels_count = 250,
      max_lines_count = 200,
@@ -152,6 +152,27 @@ showExecutionEntryTriggerMarkers = input.bool(
      group = groupExecution
 )
 
+requireConfirmationBreakForEntry = input.bool(
+     true,
+     "Require confirmation candle break for entry trigger",
+     group = groupExecution
+)
+
+entryTriggerBreakMode = input.string(
+     "Wick Break",
+     "Entry trigger break mode",
+     options = ["Wick Break", "Close Break"],
+     group = groupExecution
+)
+
+confirmationBreakMemoryBars = input.int(
+     5,
+     "Confirmation break memory bars",
+     minval = 1,
+     maxval = 50,
+     group = groupExecution
+)
+
 minimumScore    = input.int(75, "Minimum setup score", minval = 0, maxval = 100, step = 5, group = groupCore)
 minimumScoreSeparation = input.int(15, "Minimum bull / bear score separation", minval = 0, maxval = 50, step = 5, group = groupCore)
 requireOTEForDecision = input.bool(false, "Require OTE for BUY / SELL", group = groupCore)
@@ -298,9 +319,9 @@ londonShade = color.new(color.rgb(35, 95, 180), 91)
 newYorkShade = color.new(color.rgb(130, 70, 170), 91)
 
 //=============================================================================
-// 2A. CHART READABILITY LABEL TEXT — PR9 / EXEC PR6
+// 2A. CHART READABILITY LABEL TEXT — PR9 / EXEC PR7
 // Centralized label text for Full / Short / Minimal chart display modes.
-// PR6 preserves clean defaults and adds entry-trigger labeling.
+// PR7 preserves clean defaults and adds confirmation-break entry-trigger labeling.
 //=============================================================================
 labelModeFull = chartLabelMode == "Full"
 labelModeShort = chartLabelMode == "Short"
@@ -1345,7 +1366,7 @@ expectedNextEventText = decisionLongReady or decisionShortReady ? "Manage Trade 
      decisionStage == "ORDER BLOCK" ? (decisionDirection == 1 ? "Bullish OB Retest" : "Bearish OB Retest") :
      decisionStage == "FVG" ? (decisionDirection == 1 ? "Bullish FVG" : "Bearish FVG") :
      decisionStage == "OTE" ? "OTE Retracement" :
-     decisionStage == "ENTRY" ? "Entry Confirmation" : "Stronger Confirmation"
+     decisionStage == "ENTRY" ? (requireConfirmationBreakForEntry ? "Break Confirmation Candle" : "Entry Confirmation") : "Stronger Confirmation"
 
 marketBriefingText = decisionLongReady ? "BUY active. Manage plan. Avoid shorts." :
      decisionShortReady ? "SELL active. Manage plan. Avoid longs." :
@@ -1365,9 +1386,9 @@ marketBriefingText = decisionLongReady ? "BUY active. Manage plan. Avoid shorts.
      "No clean story. Wait."
 
 //=============================================================================
-// 13B. EXECUTION ENGINE — PR6
-// Tracks retests, confirmation candles, entry permission, entry-trigger locks,
-// and de-duplicated visual markers without changing BUY / SELL logic.
+// 13B. EXECUTION ENGINE — PR7
+// Tracks retests, confirmation candles, confirmation-candle break triggers,
+// entry-trigger locks, and de-duplicated visual markers without changing BUY / SELL logic.
 //=============================================================================
 executionZoneOverlap(float zoneTop, float zoneBottom) =>
     not na(zoneTop) and not na(zoneBottom) and high >= zoneBottom and low <= zoneTop
@@ -1448,10 +1469,64 @@ executionDirectionalConfirmation = decisionDirection == 1 ? recentBullConfirmati
 executionConfirmationText = recentBullConfirmation ? "Bullish Confirmation" :
      recentBearConfirmation ? "Bearish Confirmation" : "Waiting"
 
-// PR6 Entry Trigger Lock.
-// Confirmation can remain visible, but only the first valid trigger per active zone is allowed.
-bullEntryTriggerCandidate = decisionDirection == 1 and executionBullConfirmationSignal and not decisionConflict and (recentBullOBRetest or recentBullFVGRetest)
-bearEntryTriggerCandidate = decisionDirection == -1 and executionBearConfirmationSignal and not decisionConflict and (recentBearOBRetest or recentBearFVGRetest)
+// PR7 Confirmation Candle Break Trigger.
+// A confirmation candle arms the setup. The entry trigger fires only after price
+// breaks that confirmation candle high/low, then PR6 locks the first trigger per zone.
+var float bullEntryConfirmationHigh = na
+var float bullEntryConfirmationLow = na
+var int bullEntryConfirmationBar = na
+var int bullEntryConfirmationZoneBar = na
+
+var float bearEntryConfirmationHigh = na
+var float bearEntryConfirmationLow = na
+var int bearEntryConfirmationBar = na
+var int bearEntryConfirmationZoneBar = na
+
+if executionBullConfirmationSignal
+    bullEntryConfirmationHigh := high
+    bullEntryConfirmationLow := low
+    bullEntryConfirmationBar := bar_index
+    bullEntryConfirmationZoneBar := activeZoneCreatedBar
+
+if executionBearConfirmationSignal
+    bearEntryConfirmationHigh := high
+    bearEntryConfirmationLow := low
+    bearEntryConfirmationBar := bar_index
+    bearEntryConfirmationZoneBar := activeZoneCreatedBar
+
+bullEntryConfirmationReady = not na(bullEntryConfirmationBar) and bar_index - bullEntryConfirmationBar <= confirmationBreakMemoryBars and
+     (na(bullEntryConfirmationZoneBar) or na(activeZoneCreatedBar) or bullEntryConfirmationZoneBar == activeZoneCreatedBar)
+
+bearEntryConfirmationReady = not na(bearEntryConfirmationBar) and bar_index - bearEntryConfirmationBar <= confirmationBreakMemoryBars and
+     (na(bearEntryConfirmationZoneBar) or na(activeZoneCreatedBar) or bearEntryConfirmationZoneBar == activeZoneCreatedBar)
+
+bullConfirmationBreakArmed = bullEntryConfirmationReady and bar_index > bullEntryConfirmationBar
+bearConfirmationBreakArmed = bearEntryConfirmationReady and bar_index > bearEntryConfirmationBar
+
+bullConfirmationHighBroken = not na(bullEntryConfirmationHigh) and (
+     entryTriggerBreakMode == "Close Break" ?
+     close > bullEntryConfirmationHigh and close[1] <= bullEntryConfirmationHigh :
+     high > bullEntryConfirmationHigh and high[1] <= bullEntryConfirmationHigh
+)
+
+bearConfirmationLowBroken = not na(bearEntryConfirmationLow) and (
+     entryTriggerBreakMode == "Close Break" ?
+     close < bearEntryConfirmationLow and close[1] >= bearEntryConfirmationLow :
+     low < bearEntryConfirmationLow and low[1] >= bearEntryConfirmationLow
+)
+
+bullConfirmationBreakCandidate = decisionDirection == 1 and bullConfirmationBreakArmed and bullConfirmationHighBroken and
+     not decisionConflict and (recentBullOBRetest or recentBullFVGRetest)
+
+bearConfirmationBreakCandidate = decisionDirection == -1 and bearConfirmationBreakArmed and bearConfirmationLowBroken and
+     not decisionConflict and (recentBearOBRetest or recentBearFVGRetest)
+
+// Optional fallback preserves PR6 behavior when the new break trigger is disabled.
+bullImmediateConfirmationCandidate = decisionDirection == 1 and executionBullConfirmationSignal and not decisionConflict and (recentBullOBRetest or recentBullFVGRetest)
+bearImmediateConfirmationCandidate = decisionDirection == -1 and executionBearConfirmationSignal and not decisionConflict and (recentBearOBRetest or recentBearFVGRetest)
+
+bullEntryTriggerCandidate = requireConfirmationBreakForEntry ? bullConfirmationBreakCandidate : bullImmediateConfirmationCandidate
+bearEntryTriggerCandidate = requireConfirmationBreakForEntry ? bearConfirmationBreakCandidate : bearImmediateConfirmationCandidate
 
 var int lastBullEntryTriggerBar = na
 var int lastBearEntryTriggerBar = na
@@ -1483,10 +1558,16 @@ executionCurrentZoneLocked = decisionDirection == 1 ? bullCurrentZoneLocked :
      bullCurrentZoneLocked or bearCurrentZoneLocked
 
 executionTriggerActive = executionBullEntryTriggerSignal or executionBearEntryTriggerSignal
+executionBreakArmed = requireConfirmationBreakForEntry and (
+     decisionDirection == 1 ? bullConfirmationBreakArmed :
+     decisionDirection == -1 ? bearConfirmationBreakArmed :
+     bullConfirmationBreakArmed or bearConfirmationBreakArmed
+)
 executionSetupForming = (executionDirectionalOBRetest or executionDirectionalFVGRetest) and not executionDirectionalConfirmation and not executionCurrentZoneLocked
 
-executionEntryLockText = executionTriggerActive ? "Entry Trigger Active" :
+executionEntryLockText = executionTriggerActive ? "Entry Break Trigger Active" :
      executionCurrentZoneLocked ? "Entry Used / Locked" :
+     executionBreakArmed ? "Break Confirmation Candle" :
      executionDirectionalConfirmation ? "Confirmation Ready" :
      executionSetupForming ? "Setup Forming" : "Waiting"
 
@@ -1494,6 +1575,7 @@ executionStatusText = decisionConflict ? "Stand Down" :
      executionTriggerActive ? "Entry Trigger" :
      executionCurrentZoneLocked ? "Entry Used" :
      decisionLongReady or decisionShortReady ? "Triggered" :
+     executionBreakArmed ? "Break Armed" :
      executionDirectionalConfirmation ? "Confirmation" :
      executionDirectionalOBRetest or executionDirectionalFVGRetest ? "Retesting" :
      decisionDirection == 1 or decisionDirection == -1 ? "Preparing" : "Not Ready"
@@ -1501,24 +1583,31 @@ executionStatusText = decisionConflict ? "Stand Down" :
 executionEntryPermissionText = executionBullEntryTriggerSignal ? "Long Trigger" :
      executionBearEntryTriggerSignal ? "Short Trigger" :
      executionCurrentZoneLocked ? "Entry Used / Locked" :
+     executionBreakArmed ? "Break Confirmation" :
      executionDirectionalConfirmation ? "Confirmation Ready" :
      executionSetupForming ? "Setup Forming" : "Wait"
 
-executionStatusValue = executionStatusText == "Triggered" ? 6 :
-     executionStatusText == "Entry Trigger" ? 5 :
-     executionStatusText == "Entry Used" ? 4 :
+executionStatusValue = executionStatusText == "Triggered" ? 7 :
+     executionStatusText == "Entry Trigger" ? 6 :
+     executionStatusText == "Entry Used" ? 5 :
+     executionStatusText == "Break Armed" ? 4 :
      executionStatusText == "Confirmation" ? 3 :
      executionStatusText == "Retesting" ? 2 :
      executionStatusText == "Preparing" ? 1 : 0
 
 executionEntryPermissionValue = executionEntryPermissionText == "Long Trigger" ? 2 :
      executionEntryPermissionText == "Short Trigger" ? -2 :
+     executionEntryPermissionText == "Break Confirmation" ? 1.5 :
      executionEntryPermissionText == "Confirmation Ready" ? 1 :
      executionEntryPermissionText == "Entry Used / Locked" ? 0.5 : 0
 
 plot(showExecutionDebug ? (executionDirectionalOBRetest ? 1 : 0) : na, "Execution OB Retest", display = display.data_window)
 plot(showExecutionDebug ? (executionDirectionalFVGRetest ? 1 : 0) : na, "Execution FVG Retest", display = display.data_window)
 plot(showExecutionDebug ? (executionDirectionalConfirmation ? 1 : 0) : na, "Execution Confirmation", display = display.data_window)
+plot(showExecutionDebug ? (executionBreakArmed ? 1 : 0) : na, "Execution Confirmation Break Armed", display = display.data_window)
+plot(showExecutionDebug ? (bullConfirmationBreakCandidate ? 1 : bearConfirmationBreakCandidate ? -1 : 0) : na, "Execution Confirmation Break Candidate", display = display.data_window)
+plot(showExecutionDebug and requireConfirmationBreakForEntry ? bullEntryConfirmationHigh : na, "Bullish confirmation break high", display = display.data_window)
+plot(showExecutionDebug and requireConfirmationBreakForEntry ? bearEntryConfirmationLow : na, "Bearish confirmation break low", display = display.data_window)
 plot(showExecutionDebug ? executionStatusValue : na, "Execution Status Value", display = display.data_window)
 plot(showExecutionDebug ? executionEntryPermissionValue : na, "Execution Entry Permission", display = display.data_window)
 plot(showExecutionDebug ? (executionBullEntryTriggerSignal ? 1 : executionBearEntryTriggerSignal ? -1 : 0) : na, "Execution Entry Trigger Signal", display = display.data_window)
@@ -1730,7 +1819,7 @@ if barstate.islast
         string compactFvgOTE = (fvgActive ? fvgText : "FVG …") + " / " + (dashboardOTE ? "OTE ✓" : "OTE …")
         string compactScore = str.tostring(lastScore) + "% / " + lastGrade
         color decisionColor = lastDecision == "BUY" ? bullColor : lastDecision == "SELL" ? bearColor : neutralColor
-        color executionEntryPermissionColor = executionEntryPermissionText == "Long Trigger" ? bullColor : executionEntryPermissionText == "Short Trigger" ? bearColor : executionEntryPermissionText == "Confirmation Ready" ? liqColor : neutralColor
+        color executionEntryPermissionColor = executionEntryPermissionText == "Long Trigger" ? bullColor : executionEntryPermissionText == "Short Trigger" ? bearColor : (executionEntryPermissionText == "Confirmation Ready" or executionEntryPermissionText == "Break Confirmation") ? liqColor : neutralColor
         string dashboardHtfSession = biasText + " / " + activeSessionText
         string dashboardPlanText = showSmartTradePanel and lastPlanDirection != "WAIT" ? lastPlanDirection : "No active plan"
         string dashboardEntryStop = showSmartTradePanel and not na(lastPlanEntry) and not na(lastPlanStop) ? str.tostring(lastPlanEntry, format.mintick) + " / " + str.tostring(lastPlanStop, format.mintick) : "—"
@@ -1738,7 +1827,7 @@ if barstate.islast
 
         if isMorningBrief
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 EXEC PR6", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 EXEC PR7", text_color = color.white, bgcolor = panelColor, text_size = size.small)
             table.cell(dash, 0, 1, "MORNING BRIEF", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 1, "", bgcolor = color.new(color.black, 0))
 
@@ -1771,7 +1860,7 @@ if barstate.islast
 
         else if isExecutionFocus
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 EXEC PR6", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 EXEC PR7", text_color = color.white, bgcolor = panelColor, text_size = size.small)
             table.cell(dash, 0, 1, "EXECUTION FOCUS", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 1, lastDecision, text_color = decisionColor, bgcolor = color.new(color.black, 0), text_size = size.large)
 
@@ -1810,7 +1899,7 @@ if barstate.islast
 
         else if isTradeManagement
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 EXEC PR6", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 EXEC PR7", text_color = color.white, bgcolor = panelColor, text_size = size.small)
             table.cell(dash, 0, 1, "TRADE MANAGEMENT", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 1, lastPlanDirection, text_color = lastPlanDirection == "LONG" ? bullColor : lastPlanDirection == "SHORT" ? bearColor : neutralColor, bgcolor = color.new(color.black, 0), text_size = size.large)
 
@@ -1837,7 +1926,7 @@ if barstate.islast
 
         else if isFull
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 EXEC PR6", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 EXEC PR7", text_color = color.white, bgcolor = panelColor, text_size = size.small)
 
             table.cell(dash, 0, 1, "FULL DASHBOARD", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 1, "", bgcolor = color.new(color.black, 0))
@@ -1881,5 +1970,5 @@ alertcondition(bullStructureEvent and bullInstitutionalOB, "ICE Genesis: Bullish
 alertcondition(bearStructureEvent and bearInstitutionalOB, "ICE Genesis: Bearish institutional OB", "ICE Genesis validated a bearish institutional order block on {{ticker}} {{interval}}.")
 alertcondition(decisionLongSignal, "ICE Genesis: Decision BUY", "ICE Genesis Decision Engine confirmed a BUY setup on {{ticker}} {{interval}}.")
 alertcondition(decisionShortSignal, "ICE Genesis: Decision SELL", "ICE Genesis Decision Engine confirmed a SELL setup on {{ticker}} {{interval}}.")
-alertcondition(executionBullEntryTriggerSignal, "ICE Genesis: Bullish entry trigger", "ICE Genesis Execution Engine confirmed a bullish entry trigger on {{ticker}} {{interval}}.")
-alertcondition(executionBearEntryTriggerSignal, "ICE Genesis: Bearish entry trigger", "ICE Genesis Execution Engine confirmed a bearish entry trigger on {{ticker}} {{interval}}.")
+alertcondition(executionBullEntryTriggerSignal, "ICE Genesis: Bullish confirmation-break entry trigger", "ICE Genesis Execution Engine confirmed a bullish confirmation-break entry trigger on {{ticker}} {{interval}}.")
+alertcondition(executionBearEntryTriggerSignal, "ICE Genesis: Bearish confirmation-break entry trigger", "ICE Genesis Execution Engine confirmed a bearish confirmation-break entry trigger on {{ticker}} {{interval}}.")
