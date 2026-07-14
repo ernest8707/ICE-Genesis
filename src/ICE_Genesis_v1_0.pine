@@ -1,6 +1,6 @@
 //@version=6
 indicator(
-     "ICE Genesis v1.0 - Sniper PR1",
+     "ICE Genesis v1.0 - Sniper PR2",
 shorttitle = "ICEGen",     overlay = true,
      max_labels_count = 250,
      max_lines_count = 200,
@@ -199,6 +199,14 @@ protectedLevelBreakMode = input.string(
      group = groupSniper
 )
 
+sniperInternalSweepMemoryBars = input.int(
+     12,
+     "Internal sweep memory bars",
+     minval = 1,
+     maxval = 100,
+     group = groupSniper
+)
+
 minimumScore    = input.int(75, "Minimum setup score", minval = 0, maxval = 100, step = 5, group = groupCore)
 minimumScoreSeparation = input.int(15, "Minimum bull / bear score separation", minval = 0, maxval = 50, step = 5, group = groupCore)
 requireOTEForDecision = input.bool(false, "Require OTE for BUY / SELL", group = groupCore)
@@ -345,9 +353,9 @@ londonShade = color.new(color.rgb(35, 95, 180), 91)
 newYorkShade = color.new(color.rgb(130, 70, 170), 91)
 
 //=============================================================================
-// 2A. CHART READABILITY LABEL TEXT — PR9 / SNIPER PR1
+// 2A. CHART READABILITY LABEL TEXT — PR9 / SNIPER PR2
 // Centralized label text for Full / Short / Minimal chart display modes.
-// Sniper PR1 preserves PR7 execution behavior and adds protected-level tracking.
+// Sniper PR2 preserves PR1 protected-level tracking and adds internal sweep validation.
 //=============================================================================
 labelModeFull = chartLabelMode == "Full"
 labelModeShort = chartLabelMode == "Short"
@@ -844,10 +852,11 @@ bearStructureEvent = internalBearCHoCH or internalBearBOS or externalBearCHoCH o
 externalStructureEvent = externalBullCHoCH or externalBearCHoCH or externalBullBOS or externalBearBOS
 
 //=============================================================================
-// 8A. SNIPER MODEL ENGINE PR1 — PROTECTED LEVEL TRACKER
+// 8A. SNIPER MODEL ENGINE PR1 / PR2 — PROTECTED LEVEL TRACKER
 // Tracks the protected high for bearish sniper setups and the protected low for
 // bullish sniper setups. Internal liquidity sweeps can remain valid, but a sweep
 // of the protected level invalidates / resets the sniper setup.
+// PR2 keeps this guard intact and adds internal sweep validation later in the execution flow.
 //=============================================================================
 protectedHighBroken(float level) =>
     not na(level) and (protectedLevelBreakMode == "Close Break" ? close > level : high > level)
@@ -1550,6 +1559,95 @@ executionRetestText = executionDirectionalOBRetest and executionDirectionalFVGRe
      executionDirectionalOBRetest ? "OB Retest" :
      executionDirectionalFVGRetest ? "FVG Retest" : "No Retest"
 
+//=============================================================================
+// 13C. SNIPER MODEL ENGINE PR2 — INTERNAL LIQUIDITY SWEEP VALIDATION
+// Validates the internal liquidity sweep that occurs during the pullback into
+// the active order block / FVG, while keeping protected-level invalidation separate.
+// Bearish: internal BSL sweep during pullback is valid; protected high sweep invalidates.
+// Bullish: internal SSL sweep during pullback is valid; protected low sweep invalidates.
+//=============================================================================
+sniperBullPullbackNow = enableSniperModel and activeBullish and (bullOBRetestNow or bullFVGRetestNow)
+sniperBearPullbackNow = enableSniperModel and not activeBullish and (bearOBRetestNow or bearFVGRetestNow)
+
+var int sniperBullPullbackStartBar = na
+var int sniperBearPullbackStartBar = na
+var int sniperBullPullbackZoneBar = na
+var int sniperBearPullbackZoneBar = na
+var int sniperBullInternalSweepBar = na
+var int sniperBearInternalSweepBar = na
+var int sniperBullInternalSweepZoneBar = na
+var int sniperBearInternalSweepZoneBar = na
+
+if enableSniperModel and bullOBZoneSignal
+    sniperBullPullbackStartBar := na
+    sniperBullPullbackZoneBar := activeZoneCreatedBar
+    sniperBullInternalSweepBar := na
+    sniperBullInternalSweepZoneBar := activeZoneCreatedBar
+
+if enableSniperModel and bearOBZoneSignal
+    sniperBearPullbackStartBar := na
+    sniperBearPullbackZoneBar := activeZoneCreatedBar
+    sniperBearInternalSweepBar := na
+    sniperBearInternalSweepZoneBar := activeZoneCreatedBar
+
+if sniperBullPullbackNow and (na(sniperBullPullbackStartBar) or sniperBullPullbackZoneBar != activeZoneCreatedBar)
+    sniperBullPullbackStartBar := bar_index
+    sniperBullPullbackZoneBar := activeZoneCreatedBar
+
+if sniperBearPullbackNow and (na(sniperBearPullbackStartBar) or sniperBearPullbackZoneBar != activeZoneCreatedBar)
+    sniperBearPullbackStartBar := bar_index
+    sniperBearPullbackZoneBar := activeZoneCreatedBar
+
+sniperBullPullbackActive = enableSniperModel and not na(sniperBullPullbackStartBar) and
+     (na(sniperBullPullbackZoneBar) or na(activeZoneCreatedBar) or sniperBullPullbackZoneBar == activeZoneCreatedBar) and
+     (bar_index - sniperBullPullbackStartBar <= sniperInternalSweepMemoryBars) and
+     not sniperBullSetupInvalidated
+
+sniperBearPullbackActive = enableSniperModel and not na(sniperBearPullbackStartBar) and
+     (na(sniperBearPullbackZoneBar) or na(activeZoneCreatedBar) or sniperBearPullbackZoneBar == activeZoneCreatedBar) and
+     (bar_index - sniperBearPullbackStartBar <= sniperInternalSweepMemoryBars) and
+     not sniperBearSetupInvalidated
+
+sniperBullInternalSSLSweepNow = sniperBullPullbackActive and internalSSLSweep and not sniperBullProtectedLowSweptNow
+sniperBearInternalBSLSweepNow = sniperBearPullbackActive and internalBSLSweep and not sniperBearProtectedHighSweptNow
+
+if sniperBullInternalSSLSweepNow
+    sniperBullInternalSweepBar := bar_index
+    sniperBullInternalSweepZoneBar := activeZoneCreatedBar
+
+if sniperBearInternalBSLSweepNow
+    sniperBearInternalSweepBar := bar_index
+    sniperBearInternalSweepZoneBar := activeZoneCreatedBar
+
+sniperBullInternalSweepValid = enableSniperModel and not sniperBullSetupInvalidated and
+     not na(sniperBullInternalSweepBar) and
+     bar_index - sniperBullInternalSweepBar <= sniperInternalSweepMemoryBars and
+     (na(sniperBullInternalSweepZoneBar) or na(activeZoneCreatedBar) or sniperBullInternalSweepZoneBar == activeZoneCreatedBar)
+
+sniperBearInternalSweepValid = enableSniperModel and not sniperBearSetupInvalidated and
+     not na(sniperBearInternalSweepBar) and
+     bar_index - sniperBearInternalSweepBar <= sniperInternalSweepMemoryBars and
+     (na(sniperBearInternalSweepZoneBar) or na(activeZoneCreatedBar) or sniperBearInternalSweepZoneBar == activeZoneCreatedBar)
+
+sniperBullSweepText = sniperBullSetupInvalidated ? "Bull PL swept / reset" :
+     sniperBullInternalSweepValid ? "Internal SSL swept ✓" :
+     sniperBullPullbackActive ? "Need internal SSL" :
+     "Waiting for pullback"
+
+sniperBearSweepText = sniperBearSetupInvalidated ? "Bear PH swept / reset" :
+     sniperBearInternalSweepValid ? "Internal BSL swept ✓" :
+     sniperBearPullbackActive ? "Need internal BSL" :
+     "Waiting for pullback"
+
+sniperInternalSweepText = orderFlow == -1 ? sniperBearSweepText :
+     orderFlow == 1 ? sniperBullSweepText :
+     sniperBearPullbackActive or sniperBearInternalSweepValid ? sniperBearSweepText :
+     sniperBullPullbackActive or sniperBullInternalSweepValid ? sniperBullSweepText : "Waiting for pullback"
+
+sniperInternalSweepColor = str.contains(sniperInternalSweepText, "reset") ? bearColor :
+     str.contains(sniperInternalSweepText, "✓") ? bullColor :
+     str.contains(sniperInternalSweepText, "Need") ? liqColor : neutralColor
+
 // Confirmation candle logic.
 // Bullish confirmation requires a bullish candle after/inside a bullish retest zone.
 // Bearish confirmation requires a bearish candle after/inside a bearish retest zone.
@@ -1941,7 +2039,7 @@ if barstate.islast
 
         if isMorningBrief
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 SNIPER PR1", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 SNIPER PR2", text_color = color.white, bgcolor = panelColor, text_size = size.small)
             table.cell(dash, 0, 1, "MORNING BRIEF", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 1, "", bgcolor = color.new(color.black, 0))
 
@@ -1974,7 +2072,7 @@ if barstate.islast
 
         else if isExecutionFocus
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 SNIPER PR1", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 SNIPER PR2", text_color = color.white, bgcolor = panelColor, text_size = size.small)
             table.cell(dash, 0, 1, "EXECUTION FOCUS", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 1, lastDecision, text_color = decisionColor, bgcolor = color.new(color.black, 0), text_size = size.large)
 
@@ -2002,21 +2100,24 @@ if barstate.islast
             table.cell(dash, 0, 9, "Protected Guard", text_color = neutralColor, bgcolor = panelColor)
             table.cell(dash, 1, 9, sniperProtectedGuardText, text_color = sniperProtectedGuardColor, bgcolor = panelColor, text_size = size.tiny)
 
-            table.cell(dash, 0, 10, "OTE / HTF", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 10, (dashboardOTE ? "OTE OK" : "OTE ...") + " / " + biasText, text_color = dashboardOTE ? bullColor : neutralColor, bgcolor = panelColor, text_size = size.tiny)
+            table.cell(dash, 0, 10, "Sniper Sweep", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 10, sniperInternalSweepText, text_color = sniperInternalSweepColor, bgcolor = panelColor, text_size = size.tiny)
 
-            table.cell(dash, 0, 11, "Objective", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 11, currentObjectiveText, text_color = marketDirectionColor, bgcolor = panelColor, text_size = size.tiny)
+            table.cell(dash, 0, 11, "OTE / HTF", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 11, (dashboardOTE ? "OTE OK" : "OTE ...") + " / " + biasText, text_color = dashboardOTE ? bullColor : neutralColor, bgcolor = panelColor, text_size = size.tiny)
 
-            table.cell(dash, 0, 12, "Next Event", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 12, expectedNextEventText, text_color = marketDirectionColor, bgcolor = panelColor, text_size = size.tiny)
+            table.cell(dash, 0, 12, "Objective", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 12, currentObjectiveText, text_color = marketDirectionColor, bgcolor = panelColor, text_size = size.tiny)
 
-            table.cell(dash, 0, 13, "Briefing", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 13, marketBriefingText, text_color = marketDirectionColor, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 0, 13, "Next Event", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 13, expectedNextEventText, text_color = marketDirectionColor, bgcolor = panelColor, text_size = size.tiny)
+
+            table.cell(dash, 0, 14, "Briefing", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 14, marketBriefingText, text_color = marketDirectionColor, bgcolor = panelColor, text_size = size.small)
 
         else if isTradeManagement
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 SNIPER PR1", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 SNIPER PR2", text_color = color.white, bgcolor = panelColor, text_size = size.small)
             table.cell(dash, 0, 1, "TRADE MANAGEMENT", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 1, lastPlanDirection, text_color = lastPlanDirection == "LONG" ? bullColor : lastPlanDirection == "SHORT" ? bearColor : neutralColor, bgcolor = color.new(color.black, 0), text_size = size.large)
 
@@ -2043,7 +2144,7 @@ if barstate.islast
 
         else if isFull
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 SNIPER PR1", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 SNIPER PR2", text_color = color.white, bgcolor = panelColor, text_size = size.small)
 
             table.cell(dash, 0, 1, "FULL DASHBOARD", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 1, "", bgcolor = color.new(color.black, 0))
@@ -2069,11 +2170,14 @@ if barstate.islast
             table.cell(dash, 0, 8, "Protected Guard", text_color = neutralColor, bgcolor = panelColor)
             table.cell(dash, 1, 8, sniperProtectedGuardText, text_color = sniperProtectedGuardColor, bgcolor = panelColor, text_size = size.tiny)
 
-            table.cell(dash, 0, 9, "Objective", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 9, currentObjectiveText, text_color = marketDirectionColor, bgcolor = panelColor, text_size = size.tiny)
+            table.cell(dash, 0, 9, "Sniper Sweep", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 9, sniperInternalSweepText, text_color = sniperInternalSweepColor, bgcolor = panelColor, text_size = size.tiny)
 
-            table.cell(dash, 0, 10, "Next Event", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 10, expectedNextEventText, text_color = marketDirectionColor, bgcolor = panelColor, text_size = size.tiny)
+            table.cell(dash, 0, 10, "Objective", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 10, currentObjectiveText, text_color = marketDirectionColor, bgcolor = panelColor, text_size = size.tiny)
+
+            table.cell(dash, 0, 11, "Next Event", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 11, expectedNextEventText, text_color = marketDirectionColor, bgcolor = panelColor, text_size = size.tiny)
  
 //=============================================================================
 // 16. ALERTS
