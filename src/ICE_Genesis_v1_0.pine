@@ -1,6 +1,6 @@
 //@version=6
 indicator(
-     "ICE Genesis v1.0 - Chart Readability PR8",
+     "ICE Genesis v1.0 - Chart Readability PR9",
 shorttitle = "ICEGen",     overlay = true,
      max_labels_count = 250,
      max_lines_count = 200,
@@ -36,7 +36,7 @@ groupDashboard = "10. Adaptive Dashboard"
 groupInstitutionalBias = "11. Institutional Bias"
 groupExecution = "12. Execution Engine"
 showDashboard = input.bool(true, "Show dashboard", group = groupCore)
-dashboardMode = input.string("Full", "Dashboard mode", options = ["Full", "Morning Brief", "Execution", "Trade Management", "Compact", "Minimal", "Off"], group = groupDashboard)
+dashboardMode = input.string("Execution", "Dashboard mode", options = ["Full", "Morning Brief", "Execution", "Trade Management", "Compact", "Minimal", "Off"], group = groupDashboard)
 enableInstitutionalBias = input.bool(
      true,
      "Enable Institutional Bias Engine",
@@ -172,7 +172,7 @@ showExternalLiquidity = input.bool(true, "Track external BSL / SSL", group = gro
 useEqualLiquidity = input.bool(true, "Track persistent EQH / EQL", group = groupLiquidity)
 equalToleranceATR = input.float(0.10, "Equal-level tolerance × ATR", minval = 0.01, step = 0.01, group = groupLiquidity)
 liquiditySweepMode = input.string("Wick Rejection", "Sweep confirmation", options = ["Wick Rejection", "Any Trade Through"], group = groupLiquidity)
-showUntouchedEqualLevels = input.bool(true, "Show untouched EQH / EQL", group = groupLiquidity)
+showUntouchedEqualLevels = input.bool(false, "Show untouched EQH / EQL", group = groupLiquidity)
 maxEqualLevels = input.int(6, "Maximum active EQH / EQL levels", minval = 1, maxval = 20, group = groupLiquidity)
 
 atrLength       = input.int(14, "ATR length", minval = 1, group = groupDisp)
@@ -190,9 +190,9 @@ fvgLabelMode = input.string(
      group = groupZones
 )
 maxOBZones      = input.int(6, "Maximum visible order-block zones", minval = 1, maxval = 20, group = groupZones)
-obZoneOpacity   = input.int(86, "Order-block fill transparency", minval = 50, maxval = 95, group = groupZones)
+obZoneOpacity   = input.int(88, "Order-block fill transparency", minval = 50, maxval = 95, group = groupZones)
 obBorderWidth   = input.int(1, "Order-block border width", minval = 1, maxval = 4, group = groupZones)
-showOBPriceText = input.bool(true, "Show OB type and price range inside zone", group = groupZones)
+showOBPriceText = input.bool(false, "Show OB type and price range inside zone", group = groupZones)
 orderBlockLabelMode = input.string(
      "None",
      "Order Block Label Mode",
@@ -229,8 +229,8 @@ structureLineWidth = input.int(1, "Structure-line width", minval = 1, maxval = 3
 anchorStructureAtSwing = input.bool(true, "Anchor structure line at broken swing", group = groupVisual)
 structureLabelPosition = input.string("Near break", "Structure text position", options = ["Centered", "Near break"], group = groupVisual)
 fadeInternalStructure = input.bool(true, "Fade internal structure events", group = groupVisual)
-showSessionShading = input.bool(true, "Show Asia / London / New York shading", group = groupVisual)
-visualMode = input.string("Study", "Visual mode", options = ["Study", "Trading", "Minimal"], group = groupVisual)
+showSessionShading = input.bool(false, "Show Asia / London / New York shading", group = groupVisual)
+visualMode = input.string("Trading", "Visual mode", options = ["Study", "Trading", "Minimal"], group = groupVisual)
 showLiquidityLines = input.bool(true, "Show liquidity labels with dashed lines", group = groupVisual)
 liquidityLineBars = input.int(10, "Liquidity-line length (bars)", minval = 3, maxval = 50, group = groupVisual)
 liquidityLabelCooldownBars = input.int(
@@ -260,7 +260,7 @@ liquidityLabelOBProximityATR = input.float(
      group = groupVisual
 )
 chartLabelMode = input.string(
-     "Short",
+     "Minimal",
      "Chart Label Mode",
      options = ["Full", "Short", "Minimal"],
      group = groupVisual
@@ -286,9 +286,9 @@ londonShade = color.new(color.rgb(35, 95, 180), 91)
 newYorkShade = color.new(color.rgb(130, 70, 170), 91)
 
 //=============================================================================
-// 2A. CHART READABILITY LABEL TEXT — PR8
+// 2A. CHART READABILITY LABEL TEXT — PR9
 // Centralized label text for Full / Short / Minimal chart display modes.
-// PR8 keeps chart labels clean and de-duplicates execution markers.
+// PR9 finalizes clean default settings while preserving PR8 marker de-duplication.
 //=============================================================================
 labelModeFull = chartLabelMode == "Full"
 labelModeShort = chartLabelMode == "Short"
@@ -1352,8 +1352,9 @@ marketBriefingText = decisionLongReady ? "BUY active. Manage plan. Avoid shorts.
      "No clean story. Wait."
 
 //=============================================================================
-// 13B. EXECUTION ENGINE — PR8
+// 13B. EXECUTION ENGINE — PR8 / PR9
 // Tracks retests, confirmation candles, entry permission, and de-duplicated visual markers without changing BUY / SELL logic.
+// PR9 keeps this execution logic unchanged and only polishes default visual settings.
 //=============================================================================
 executionZoneOverlap(float zoneTop, float zoneBottom) =>
     not na(zoneTop) and not na(zoneBottom) and high >= zoneBottom and low <= zoneTop
@@ -1657,7 +1658,7 @@ if barstate.islast
 
         if isMorningBrief
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 READ PR8", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 READ PR9", text_color = color.white, bgcolor = panelColor, text_size = size.small)
             table.cell(dash, 0, 1, "MORNING BRIEF", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 1, "", bgcolor = color.new(color.black, 0))
 
@@ -1690,7 +1691,7 @@ if barstate.islast
 
         else if isExecutionFocus
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 READ PR8", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 READ PR9", text_color = color.white, bgcolor = panelColor, text_size = size.small)
             table.cell(dash, 0, 1, "EXECUTION FOCUS", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 1, lastDecision, text_color = decisionColor, bgcolor = color.new(color.black, 0), text_size = size.large)
 
@@ -1729,7 +1730,7 @@ if barstate.islast
 
         else if isTradeManagement
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 READ PR8", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 READ PR9", text_color = color.white, bgcolor = panelColor, text_size = size.small)
             table.cell(dash, 0, 1, "TRADE MANAGEMENT", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 1, lastPlanDirection, text_color = lastPlanDirection == "LONG" ? bullColor : lastPlanDirection == "SHORT" ? bearColor : neutralColor, bgcolor = color.new(color.black, 0), text_size = size.large)
 
@@ -1756,7 +1757,7 @@ if barstate.islast
 
         else if isFull
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 READ PR8", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 READ PR9", text_color = color.white, bgcolor = panelColor, text_size = size.small)
 
             table.cell(dash, 0, 1, "FULL DASHBOARD", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 1, "", bgcolor = color.new(color.black, 0))
