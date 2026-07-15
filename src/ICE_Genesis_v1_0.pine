@@ -1,6 +1,6 @@
 //@version=6
 indicator(
-     "ICE Genesis v1.0 - IFA PR13",
+     "ICE Genesis v1.0 - IFA PR14",
 shorttitle = "ICEGen",     overlay = true,
      max_labels_count = 250,
      max_lines_count = 200,
@@ -547,9 +547,9 @@ londonShade = color.new(color.rgb(35, 95, 180), 91)
 newYorkShade = color.new(color.rgb(130, 70, 170), 91)
 
 //=============================================================================
-// 2A. CHART READABILITY LABEL TEXT — PR9 / ZIG ZAG PR3 / IFA PR13
+// 2A. CHART READABILITY LABEL TEXT — PR9 / ZIG ZAG PR3 / IFA PR14
 // Centralized label text for Full / Short / Minimal chart display modes.
-// IFA PR13 preserves PR12 behavior and polishes IFA Gate Test Mode wording.
+// IFA PR14 preserves PR13 behavior and completes the final IFA module review pass.
 //=============================================================================
 labelModeFull = chartLabelMode == "Full"
 labelModeShort = chartLabelMode == "Short"
@@ -1622,7 +1622,7 @@ zigZagDashboardText = not showZigZag ? "Off" :
 zigZagDashboardColor = not showZigZag ? neutralColor : zigZagTrendColor
 
 //=============================================================================
-// 11C. INSTITUTIONAL FOOTPRINT ALIGNMENT ENGINE — PR1 / PR2 / PR3 / PR5 / PR6 / PR7 / PR8 / PR9 / PR10 / PR11 / PR12 / PR13
+// 11C. INSTITUTIONAL FOOTPRINT ALIGNMENT ENGINE — PR1 / PR2 / PR3 / PR5 / PR6 / PR7 / PR8 / PR9 / PR10 / PR11 / PR12 / PR13 / PR14
 // PR1 adds a Zig Zag structure gate for BOS / CHoCH quality.
 // PR2 separates normal BOS / CHoCH events from institutional-quality structure
 // events by requiring the Zig Zag gate, liquidity context, displacement, and
@@ -1638,6 +1638,7 @@ zigZagDashboardColor = not showZigZag ? neutralColor : zigZagTrendColor
 // PR11 adds an optional BUY / SELL permission gate that is off by default.
 // PR12 adds a Decision Gate Audit Panel so the dashboard shows whether IFA is off, passed, or blocking.
 // PR13 polishes IFA Gate Test Mode wording so blocked and passed states are easier to understand.
+// PR14 completes the final IFA module review before branch merge. No behavior changes are added.
 //=============================================================================
 ifaBullZigZagGate = enableInstitutionalFootprintAlignment and showZigZag and
      (zigZagBullStructure or (ifaAllowTransitionStructure and zigZagTransitionStructure))
@@ -2156,12 +2157,13 @@ ifaFootprintSummaryColor = not enableInstitutionalFootprintAlignment ? neutralCo
      ifaBearFootprintStrong or ifaBearFootprintBuilding ? bearColor :
      ifaMaxFootprintScore > 0 ? liqColor : neutralColor
 
-// IFA PR9 / PR10 / PR11 / PR12 / PR13 — Institutional Footprint Permission Gate.
+// IFA PR9 / PR10 / PR11 / PR12 / PR13 / PR14 — Institutional Footprint Permission Gate.
 // Permission requires the full IFA stack to be aligned and the protected guard to remain intact.
 // PR10 adds non-repeating alerts when bullish or bearish permission first becomes active.
 // PR11 optionally lets this permission layer gate BUY / SELL decisions when enabled.
 // PR12 audits whether that gate is off, passed, blocking, or waiting for active decision pressure.
 // PR13 adds a plain-language test note for passed, blocked, and normal Decision Engine behavior.
+// PR14 review confirms permission, alert, and audit states are preserved without adding new logic.
 ifaBullStructureQualityFresh = ifaQualityFresh and ifaLastQualityDirection == 1 and str.contains(ifaLastQualityText, "Quality Bull")
 ifaBearStructureQualityFresh = ifaQualityFresh and ifaLastQualityDirection == -1 and str.contains(ifaLastQualityText, "Quality Bear")
 
@@ -2450,10 +2452,11 @@ decisionBearScore = (bearLiquidityState ? 20 : 0) +
 
 liquidityGateEnabled = requireSweepBeforeBOS or requireSweepBeforeMSS
 
-// IFA PR11 / PR12 / PR13 optional Decision Engine permission gate.
+// IFA PR11 / PR12 / PR13 / PR14 optional Decision Engine permission gate.
 // PR11 keeps default BUY / SELL behavior unchanged while Require IFA Permission for BUY / SELL is off.
 // PR12 adds an audit layer that shows whether the gate is off, passed, blocking, or waiting for pressure.
 // PR13 clarifies test-mode wording when normal Decision Engine conditions are ready but IFA is blocking.
+// PR14 preserves default Decision Engine behavior and keeps the optional IFA gate off by default.
 bullMandatoryCoreReady = bullStructureState and bullDisplacementState and bullOBState and
      (not liquidityGateEnabled or bullLiquidityState) and
      (not requireFVGForSetup or bullFVGState) and
@@ -3322,7 +3325,7 @@ if barstate.islast
 
         if isMorningBrief
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 IFA PR13", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 IFA PR14", text_color = color.white, bgcolor = panelColor, text_size = size.small)
             table.cell(dash, 0, 1, "MORNING BRIEF", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 1, "", bgcolor = color.new(color.black, 0))
 
@@ -3355,7 +3358,7 @@ if barstate.islast
 
         else if isExecutionFocus
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 IFA PR13", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 IFA PR14", text_color = color.white, bgcolor = panelColor, text_size = size.small)
             table.cell(dash, 0, 1, "EXECUTION FOCUS", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 1, lastDecision, text_color = decisionColor, bgcolor = color.new(color.black, 0), text_size = size.large)
 
@@ -3433,7 +3436,7 @@ if barstate.islast
 
         else if isTradeManagement
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 IFA PR13", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 IFA PR14", text_color = color.white, bgcolor = panelColor, text_size = size.small)
             table.cell(dash, 0, 1, "TRADE MANAGEMENT", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 1, lastPlanDirection, text_color = lastPlanDirection == "LONG" ? bullColor : lastPlanDirection == "SHORT" ? bearColor : neutralColor, bgcolor = color.new(color.black, 0), text_size = size.large)
 
@@ -3460,7 +3463,7 @@ if barstate.islast
 
         else if isFull
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 IFA PR13", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 IFA PR14", text_color = color.white, bgcolor = panelColor, text_size = size.small)
 
             table.cell(dash, 0, 1, "FULL DASHBOARD", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 1, "", bgcolor = color.new(color.black, 0))
