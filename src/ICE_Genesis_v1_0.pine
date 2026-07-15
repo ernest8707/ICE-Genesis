@@ -1,8 +1,7 @@
 //@version=6
 indicator(
-     "ICE Genesis v1.0 Alpha 3 - Professional Structure Rendering",
-     shorttitle = "ICE Genesis",
-     overlay = true,
+     "ICE Genesis v1.0 - IFA PR14",
+shorttitle = "ICEGen",     overlay = true,
      max_labels_count = 250,
      max_lines_count = 200,
      max_boxes_count = 100
@@ -13,9 +12,9 @@ indicator(
 // v1.0 Alpha 3 foundation:
 // - The Alpha 2 liquidity engine is preserved.
 // - BOS and CHoCH rendering is rebuilt for immediate chart readability.
-// - Structure lines begin at the broken swing and extend beyond the break candle.
+// - Structure lines begin at the broken swing and terminate on the break candle for clearer BOS / CHoCH mapping.
 // - Internal and external events receive separate visual strength and history controls.
-// - Tiny labels sit directly on their dashed structure line without label boxes.
+// - Centered structure labels sit directly on their dashed structure line for clearer BOS / CHoCH visibility.
 //
 // ICE Genesis is a rules-based approximation of ICT/SMC concepts.
 // It does not predict price and should be validated with replay/backtesting.
@@ -33,9 +32,201 @@ groupZones     = "6. Order Block / FVG"
 groupTime      = "7. Time Alignment"
 groupRisk      = "8. Trade Plan"
 groupVisual    = "9. Visuals"
+groupDashboard = "10. Adaptive Dashboard"
+groupInstitutionalBias = "11. Institutional Bias"
+groupExecution = "12. Execution Engine"
+groupSniper    = "13. Sniper Model Engine"
+groupZigZag    = "14. Zig Zag Market Structure"
+groupIFA       = "15. Institutional Footprint Alignment"
+showDashboard = input.bool(true, "Show dashboard", group = groupCore)
+dashboardMode = input.string("Execution", "Dashboard mode", options = ["Full", "Morning Brief", "Execution", "Trade Management", "Compact", "Minimal", "Off"], group = groupDashboard)
+enableInstitutionalBias = input.bool(
+     true,
+     "Enable Institutional Bias Engine",
+     group = groupInstitutionalBias
+)
 
-showDashboard   = input.bool(true, "Show dashboard", group = groupCore)
+anchorBiasTimeframe = input.timeframe(
+     "D",
+     "Anchor Bias Timeframe",
+     group = groupInstitutionalBias
+)
+
+trendBiasTimeframe = input.timeframe(
+     "240",
+     "Trend Bias Timeframe",
+     group = groupInstitutionalBias
+)
+
+executionBiasTimeframe = input.timeframe(
+     "60",
+     "Execution Bias Timeframe",
+     group = groupInstitutionalBias
+)
+
+requireAnchorAlignment = input.bool(
+     true,
+     "Require Anchor Bias Alignment",
+     group = groupInstitutionalBias
+)
+
+requireTrendAlignment = input.bool(
+     true,
+     "Require Trend Bias Alignment",
+     group = groupInstitutionalBias
+)
+
+requireExecutionAlignment = input.bool(
+     true,
+     "Require Execution Bias Alignment",
+     group = groupInstitutionalBias
+)
+
+allowCountertrendSetups = input.bool(
+     false,
+     "Allow Countertrend Setups",
+     group = groupInstitutionalBias
+)
+
+countertrendScorePenalty = input.int(
+     30,
+     "Countertrend Score Penalty",
+     minval = 0,
+     maxval = 100,
+     step = 5,
+     group = groupInstitutionalBias
+)
+
+showBiasDebug = input.bool(
+    false,
+    "Show Bias Debug Values",
+    group = groupInstitutionalBias
+)
+
+executionRetestMemoryBars = input.int(
+     12,
+     "Retest memory bars",
+     minval = 1,
+     maxval = 100,
+     group = groupExecution
+)
+
+showExecutionDebug = input.bool(
+     false,
+     "Show Execution Debug Values",
+     group = groupExecution
+)
+
+showExecutionRetestMarkers = input.bool(
+     true,
+     "Show retest markers",
+     group = groupExecution
+)
+
+showExecutionConfirmationMarkers = input.bool(
+     true,
+     "Show confirmation markers",
+     group = groupExecution
+)
+
+executionMarkerCooldownBars = input.int(
+     8,
+     "Execution marker cooldown bars",
+     minval = 0,
+     maxval = 100,
+     group = groupExecution
+)
+
+executionMarkersOncePerZone = input.bool(
+     true,
+     "Only show first execution marker per zone",
+     group = groupExecution
+)
+
+entryTriggerLockEnabled = input.bool(
+     true,
+     "Lock first entry trigger per zone",
+     group = groupExecution
+)
+
+showExecutionEntryTriggerMarkers = input.bool(
+     true,
+     "Show entry trigger markers",
+     group = groupExecution
+)
+
+requireConfirmationBreakForEntry = input.bool(
+     true,
+     "Require confirmation candle break for entry trigger",
+     group = groupExecution
+)
+
+entryTriggerBreakMode = input.string(
+     "Wick Break",
+     "Entry trigger break mode",
+     options = ["Wick Break", "Close Break"],
+     group = groupExecution
+)
+
+confirmationBreakMemoryBars = input.int(
+     5,
+     "Confirmation break memory bars",
+     minval = 1,
+     maxval = 50,
+     group = groupExecution
+)
+
+enableSniperModel = input.bool(
+     true,
+     "Enable Sniper Model Engine",
+     group = groupSniper
+)
+
+showSniperDebug = input.bool(
+     false,
+     "Show Sniper Debug Values",
+     group = groupSniper
+)
+
+showSniperProtectedLevels = input.bool(
+     false,
+     "Show protected high / low",
+     group = groupSniper
+)
+
+protectedLevelBreakMode = input.string(
+     "Wick Sweep",
+     "Protected level break mode",
+     options = ["Wick Sweep", "Close Break"],
+     group = groupSniper
+)
+
+sniperInternalSweepMemoryBars = input.int(
+     12,
+     "Internal sweep memory bars",
+     minval = 1,
+     maxval = 100,
+     group = groupSniper
+)
+
+sniperHTFContextMemoryBars = input.int(
+     24,
+     "HTF context memory bars",
+     minval = 1,
+     maxval = 200,
+     group = groupSniper
+)
+
+sniperRequireHTFBiasForContext = input.bool(
+     true,
+     "Require HTF bias for sniper context",
+     group = groupSniper
+)
+
 minimumScore    = input.int(75, "Minimum setup score", minval = 0, maxval = 100, step = 5, group = groupCore)
+minimumScoreSeparation = input.int(15, "Minimum bull / bear score separation", minval = 0, maxval = 50, step = 5, group = groupCore)
+requireOTEForDecision = input.bool(false, "Require OTE for BUY / SELL", group = groupCore)
+requireHTFForDecision = input.bool(false, "Require HTF alignment for BUY / SELL", group = groupCore)
 maxLabels       = input.int(14, "Maximum structure labels", minval = 2, maxval = 50, group = groupCore)
 maxLiquidityMarks = input.int(4, "Maximum liquidity marks", minval = 1, maxval = 20, group = groupCore)
 
@@ -48,14 +239,15 @@ showHTFLevels   = input.bool(false, "Show HTF protected levels", group = groupBi
 internalLen     = input.int(3, "Internal swing strength", minval = 2, maxval = 20, group = groupStructure)
 externalLen     = input.int(8, "External swing strength", minval = 3, maxval = 50, group = groupStructure)
 requireCloseBreak = input.bool(true, "Require candle close through structure", group = groupStructure)
+requireDisplacementForStructure = input.bool(true, "Require displacement on structure breaks", group = groupStructure)
 requireSweepBeforeMSS = input.bool(true, "Require liquidity sweep before MSS / CHoCH", group = groupStructure)
 requireSweepBeforeBOS = input.bool(true, "Require liquidity sweep before BOS", group = groupStructure)
 useInternalSweepGate = input.bool(true, "Include internal liquidity sweeps", group = groupStructure)
 sweepToBreakBars = input.int(24, "Maximum bars from sweep to MSS/BOS", minval = 1, maxval = 200, group = groupStructure)
-showInternalEvents = input.bool(true, "Show internal BOS / MSS", group = groupStructure)
-showExternalEvents = input.bool(true, "Show external BOS", group = groupStructure)
+showInternalEvents = input.bool(false, "Show internal BOS / MSS", group = groupStructure)
+showExternalEvents = input.bool(false, "Show external BOS", group = groupStructure)
 
-showPDLevels    = input.bool(true, "Show previous-day high / low", group = groupLiquidity)
+showPDLevels    = input.bool(false, "Show previous-day high / low", group = groupLiquidity)
 showPWLevels    = input.bool(false, "Show previous-week high / low", group = groupLiquidity)
 showSweepMarks  = input.bool(true, "Show completed liquidity sweeps", group = groupLiquidity)
 showInternalLiquidity = input.bool(true, "Track internal BSL / SSL", group = groupLiquidity)
@@ -63,7 +255,7 @@ showExternalLiquidity = input.bool(true, "Track external BSL / SSL", group = gro
 useEqualLiquidity = input.bool(true, "Track persistent EQH / EQL", group = groupLiquidity)
 equalToleranceATR = input.float(0.10, "Equal-level tolerance × ATR", minval = 0.01, step = 0.01, group = groupLiquidity)
 liquiditySweepMode = input.string("Wick Rejection", "Sweep confirmation", options = ["Wick Rejection", "Any Trade Through"], group = groupLiquidity)
-showUntouchedEqualLevels = input.bool(true, "Show untouched EQH / EQL", group = groupLiquidity)
+showUntouchedEqualLevels = input.bool(false, "Show untouched EQH / EQL", group = groupLiquidity)
 maxEqualLevels = input.int(6, "Maximum active EQH / EQL levels", minval = 1, maxval = 20, group = groupLiquidity)
 
 atrLength       = input.int(14, "ATR length", minval = 1, group = groupDisp)
@@ -74,10 +266,22 @@ displacementMemoryBars = input.int(12, "Remember displacement for dashboard (bar
 
 showOrderBlock  = input.bool(true, "Show validated order-block zones", group = groupZones)
 showFVG         = input.bool(true, "Show newest qualified FVG", group = groupZones)
+fvgLabelMode = input.string(
+     "None",
+     "FVG Label Mode",
+     options = ["Full", "Short", "None"],
+     group = groupZones
+)
 maxOBZones      = input.int(6, "Maximum visible order-block zones", minval = 1, maxval = 20, group = groupZones)
-obZoneOpacity   = input.int(78, "Order-block fill transparency", minval = 50, maxval = 95, group = groupZones)
-obBorderWidth   = input.int(2, "Order-block border width", minval = 1, maxval = 4, group = groupZones)
-showOBPriceText = input.bool(true, "Show OB type and price range inside zone", group = groupZones)
+obZoneOpacity   = input.int(88, "Order-block fill transparency", minval = 50, maxval = 95, group = groupZones)
+obBorderWidth   = input.int(1, "Order-block border width", minval = 1, maxval = 4, group = groupZones)
+showOBPriceText = input.bool(false, "Show OB type and price range inside zone", group = groupZones)
+orderBlockLabelMode = input.string(
+     "None",
+     "Order Block Label Mode",
+     options = ["Full", "Short", "None"],
+     group = groupZones
+)
 obSearchBars    = input.int(12, "Search back for order-block candle", minval = 2, maxval = 50, group = groupZones)
 useBodyForOB    = input.bool(false, "Use candle body for OB boundaries", group = groupZones)
 deleteMitigated = input.bool(true, "Delete mitigated zones", group = groupZones)
@@ -106,12 +310,222 @@ externalStructureLineBars = input.int(90, "External lookback length (bars)", min
 structureForwardBars = input.int(18, "Extend structure line past break (bars)", minval = 0, maxval = 100, group = groupVisual)
 structureLineWidth = input.int(1, "Structure-line width", minval = 1, maxval = 3, group = groupVisual)
 anchorStructureAtSwing = input.bool(true, "Anchor structure line at broken swing", group = groupVisual)
-structureLabelPosition = input.string("Near break", "Structure text position", options = ["Centered", "Near break"], group = groupVisual)
+structureLabelPosition = input.string("Centered", "Structure text position", options = ["Centered", "Near break"], group = groupVisual)
 fadeInternalStructure = input.bool(true, "Fade internal structure events", group = groupVisual)
-showSessionShading = input.bool(true, "Show Asia / London / New York shading", group = groupVisual)
-visualMode = input.string("Study", "Visual mode", options = ["Study", "Trading", "Minimal"], group = groupVisual)
+showSessionShading = input.bool(false, "Show Asia / London / New York shading", group = groupVisual)
+visualMode = input.string("Trading", "Visual mode", options = ["Study", "Trading", "Minimal"], group = groupVisual)
 showLiquidityLines = input.bool(true, "Show liquidity labels with dashed lines", group = groupVisual)
 liquidityLineBars = input.int(10, "Liquidity-line length (bars)", minval = 3, maxval = 50, group = groupVisual)
+liquidityLabelCooldownBars = input.int(
+     8,
+     "Liquidity label cooldown bars",
+     minval = 0,
+     maxval = 100,
+     group = groupVisual
+)
+liquidityLabelPriceSpacingATR = input.float(
+     0.20,
+     "Liquidity label price spacing × ATR",
+     minval = 0.0,
+     step = 0.05,
+     group = groupVisual
+)
+liquidityLabelsRequireOBContext = input.bool(
+     true,
+     "Only show liquidity labels with OB context",
+     group = groupVisual
+)
+liquidityLabelOBProximityATR = input.float(
+     1.00,
+     "Liquidity label OB proximity × ATR",
+     minval = 0.0,
+     step = 0.25,
+     group = groupVisual
+)
+chartLabelMode = input.string(
+     "Minimal",
+     "Chart Label Mode",
+     options = ["Full", "Short", "Minimal"],
+     group = groupVisual
+)
+
+showZigZag = input.bool(
+     true,
+     "Show Zig Zag",
+     group = groupZigZag
+)
+
+zigZagSwingSource = input.string(
+     "External",
+     "Zig Zag swing source",
+     options = ["Internal", "External"],
+     group = groupZigZag
+)
+
+showZigZagLabels = input.bool(
+     true,
+     "Show Zig Zag price labels",
+     group = groupZigZag
+)
+
+showZigZagStructureEvents = input.bool(
+     true,
+     "Show Zig Zag BOS / CHoCH events",
+     group = groupZigZag
+)
+
+zigZagLabelMode = input.string(
+     "Short",
+     "Zig Zag label style",
+     options = ["Full", "Short", "Off"],
+     group = groupZigZag
+)
+
+maxZigZagLegs = input.int(
+     12,
+     "Maximum Zig Zag legs",
+     minval = 2,
+     maxval = 50,
+     group = groupZigZag
+)
+
+zigZagLineWidth = input.int(
+     2,
+     "Zig Zag line thickness",
+     minval = 1,
+     maxval = 4,
+     group = groupZigZag
+)
+
+zigZagPriceLabelOffsetATR = input.float(
+     0.12,
+     "Zig Zag price label offset × ATR",
+     minval = 0.0,
+     maxval = 1.0,
+     step = 0.01,
+     group = groupZigZag
+)
+
+enableInstitutionalFootprintAlignment = input.bool(
+     true,
+     "Enable Institutional Footprint Alignment",
+     group = groupIFA
+)
+
+ifaAllowTransitionStructure = input.bool(
+     true,
+     "Allow Transition structure for IFA",
+     group = groupIFA
+)
+
+ifaAlignmentMemoryBars = input.int(
+     24,
+     "IFA alignment memory bars",
+     minval = 1,
+     maxval = 200,
+     group = groupIFA
+)
+
+ifaRequireLiquidityForQuality = input.bool(
+     true,
+     "Require liquidity sweep for IFA quality",
+     group = groupIFA
+)
+
+ifaRequireDisplacementForQuality = input.bool(
+     true,
+     "Require displacement for IFA quality",
+     group = groupIFA
+)
+
+ifaRequireImbalanceForQuality = input.bool(
+     true,
+     "Require FVG / imbalance for IFA quality",
+     group = groupIFA
+)
+
+ifaRequireOBLegAlignment = input.bool(
+     true,
+     "Require OB alignment with Zig Zag leg",
+     group = groupIFA
+)
+
+ifaOBLegToleranceATR = input.float(
+     0.75,
+     "OB leg alignment tolerance × ATR",
+     minval = 0.0,
+     maxval = 5.0,
+     step = 0.25,
+     group = groupIFA
+)
+
+ifaImbalanceMemoryBars = input.int(
+     24,
+     "IFA imbalance memory bars",
+     minval = 1,
+     maxval = 200,
+     group = groupIFA
+)
+
+ifaRequireImbalanceLegAlignment = input.bool(
+     true,
+     "Require imbalance inside Zig Zag leg",
+     group = groupIFA
+)
+
+ifaImbalanceLegToleranceATR = input.float(
+     0.50,
+     "Imbalance leg tolerance × ATR",
+     minval = 0.0,
+     maxval = 5.0,
+     step = 0.25,
+     group = groupIFA
+)
+
+ifaJudasMemoryBars = input.int(
+     24,
+     "IFA Judas swing memory bars",
+     minval = 1,
+     maxval = 200,
+     group = groupIFA
+)
+
+ifaRequireZigZagGateForJudas = input.bool(
+     true,
+     "Require Zig Zag gate for Judas swing",
+     group = groupIFA
+)
+
+ifaRequireProtectedGuardForJudas = input.bool(
+     true,
+     "Require protected guard for Judas swing",
+     group = groupIFA
+)
+
+ifaRequireDisplacementForJudas = input.bool(
+     true,
+     "Require reversal displacement for Judas swing",
+     group = groupIFA
+)
+
+ifaRequireImbalanceForJudas = input.bool(
+     true,
+     "Require imbalance for Judas swing",
+     group = groupIFA
+)
+
+ifaRequireJudasForPermission = input.bool(
+     false,
+     "Require Judas swing for IFA permission",
+     group = groupIFA
+)
+
+requireIFAPermissionForDecision = input.bool(
+     false,
+     "Require IFA Permission for BUY / SELL",
+     group = groupIFA
+)
+
 showSmartTradePanel = input.bool(true, "Show smart trade planner in dashboard", group = groupVisual)
 asiaSession = input.session("1900-0200", "Asia session", group = groupTime)
 londonSession = input.session("0200-0500", "London session", group = groupTime)
@@ -133,6 +547,40 @@ londonShade = color.new(color.rgb(35, 95, 180), 91)
 newYorkShade = color.new(color.rgb(130, 70, 170), 91)
 
 //=============================================================================
+// 2A. CHART READABILITY LABEL TEXT — PR9 / ZIG ZAG PR3 / IFA PR14
+// Centralized label text for Full / Short / Minimal chart display modes.
+// IFA PR14 preserves PR13 behavior and completes the final IFA module review pass.
+//=============================================================================
+labelModeFull = chartLabelMode == "Full"
+labelModeShort = chartLabelMode == "Short"
+labelModeMinimal = chartLabelMode == "Minimal"
+
+labelBSLTaken = labelModeFull ? "BSL  Taken ✓" : labelModeShort ? "BSL ✓" : "BSL"
+labelSSLTaken = labelModeFull ? "SSL  Taken ✓" : labelModeShort ? "SSL ✓" : "SSL"
+labelEQHTaken = labelModeFull ? "EQH  Taken ✓" : labelModeShort ? "EQH ✓" : "EQH"
+labelEQLTaken = labelModeFull ? "EQL  Taken ✓" : labelModeShort ? "EQL ✓" : "EQL"
+
+labelEQHUntouched = labelModeFull ? "EQH  Untouched" : labelModeShort ? "EQH" : "EQH"
+labelEQLUntouched = labelModeFull ? "EQL  Untouched" : labelModeShort ? "EQL" : "EQL"
+
+labelBullBOS = labelModeFull ? "Bullish BOS" : labelModeShort ? "BOS ↑" : "BOS"
+labelBearBOS = labelModeFull ? "Bearish BOS" : labelModeShort ? "BOS ↓" : "BOS"
+labelBullCHoCH = labelModeFull ? "Bullish CHoCH" : labelModeShort ? "CH ↑" : "CH"
+labelBearCHoCH = labelModeFull ? "Bearish CHoCH" : labelModeShort ? "CH ↓" : "CH"
+
+labelRetest = labelModeFull ? "RT" : labelModeShort ? "RT" : "R"
+labelConfirmation = labelModeFull ? "CONF" : labelModeShort ? "CNF" : "C"
+labelEntryTrigger = labelModeFull ? "TRIGGER" : labelModeShort ? "TRG" : "T"
+
+obLabelModeFull = orderBlockLabelMode == "Full"
+obLabelModeShort = orderBlockLabelMode == "Short"
+obLabelModeNone = orderBlockLabelMode == "None"
+
+fvgLabelModeFull = fvgLabelMode == "Full"
+fvgLabelModeShort = fvgLabelMode == "Short"
+fvgLabelModeNone = fvgLabelMode == "None"
+
+//=============================================================================
 // 3. CURRENT-TIMEFRAME EMA CONTEXT
 //=============================================================================
 ema20  = ta.ema(close, 20)
@@ -142,6 +590,39 @@ ema200 = ta.ema(close, 200)
 plot(showEMAs ? ema20 : na, "EMA 20", color = color.green, linewidth = 1)
 plot(showEMAs ? ema50 : na, "EMA 50", color = color.orange, linewidth = 1)
 plot(showEMAs ? ema200 : na, "EMA 200", color = color.purple, linewidth = 2)
+
+//=============================================================================
+// 3A. INSTITUTIONAL BIAS ENGINE — CONFIRMED TIMEFRAME DATA
+// Uses only completed candles to prevent higher-timeframe repainting.
+//=============================================================================
+anchorClose = request.security(
+     syminfo.tickerid,
+     anchorBiasTimeframe,
+     close[1],
+     barmerge.gaps_off,
+     barmerge.lookahead_on
+)
+
+trendClose = request.security(
+     syminfo.tickerid,
+     trendBiasTimeframe,
+     close[1],
+     barmerge.gaps_off,
+     barmerge.lookahead_on
+)
+
+executionClose = request.security(
+     syminfo.tickerid,
+     executionBiasTimeframe,
+     close[1],
+     barmerge.gaps_off,
+     barmerge.lookahead_on
+)
+
+// Temporary verification values. These appear only in TradingView's Data Window.
+// Disabled debug data-window plot to stay under TradingView 64-plot limit: plot(showBiasDebug ? anchorClose : na, "Anchor Bias Confirmed Close", display = display.data_window)
+// Disabled debug data-window plot to stay under TradingView 64-plot limit: plot(showBiasDebug ? trendClose : na, "Trend Bias Confirmed Close", display = display.data_window)
+// Disabled debug data-window plot to stay under TradingView 64-plot limit: plot(showBiasDebug ? executionClose : na, "Execution Bias Confirmed Close", display = display.data_window)
 
 //=============================================================================
 // 4. HIGHER-TIMEFRAME BIAS
@@ -228,7 +709,9 @@ recentBullDisplacement = not na(lastBullDisplacementBar) and bar_index - lastBul
 recentBearDisplacement = not na(lastBearDisplacementBar) and bar_index - lastBearDisplacementBar <= displacementMemoryBars
 
 //=============================================================================
-// 6. INTERNAL / EXTERNAL STRUCTURE
+// 6. MARKET STRUCTURE ENGINE 2.0 — SWING REGISTRY
+// Confirmed pivots are stored once, armed once, and consumed once.
+// This keeps detection separate from classification and rendering.
 //=============================================================================
 intPH = ta.pivothigh(high, internalLen, internalLen)
 intPL = ta.pivotlow(low, internalLen, internalLen)
@@ -267,11 +750,12 @@ if not na(extPL)
     extLowArmed := true
 
 breakAbove(float level) =>
-    not na(level) and (requireCloseBreak ? (close > level and close[1] <= level) : (high > level and high[1] <= level))
+    not na(level) and (requireCloseBreak ? close > level and close[1] <= level : high > level and high[1] <= level)
 
 breakBelow(float level) =>
-    not na(level) and (requireCloseBreak ? (close < level and close[1] >= level) : (low < level and low[1] >= level))
+    not na(level) and (requireCloseBreak ? close < level and close[1] >= level : low < level and low[1] >= level)
 
+// Raw events answer only one question: did price break this armed swing?
 internalBullBreakRaw = intHighArmed and breakAbove(lastIntHigh)
 internalBearBreakRaw = intLowArmed and breakBelow(lastIntLow)
 externalBullBreakRaw = extHighArmed and breakAbove(lastExtHigh)
@@ -321,7 +805,7 @@ newEqualLow = useEqualLiquidity and not na(extPL) and not na(lastExtLow[1]) and 
 addEqualLevel(bool isHigh, float level, int leftBar) =>
     color levelColor = liqColor
     line ln = line.new(leftBar, level, bar_index, level, xloc = xloc.bar_index, extend = extend.right, color = color.new(levelColor, 10), width = 1, style = line.style_dashed)
-    label lb = label.new(bar_index, level, isHigh ? "EQH  Untouched" : "EQL  Untouched", xloc = xloc.bar_index, yloc = yloc.price, style = label.style_none, textcolor = levelColor, size = size.tiny)
+    label lb = label.new(bar_index, level, isHigh ? labelEQHUntouched : labelEQLUntouched, xloc = xloc.bar_index, yloc = yloc.price, style = label.style_none, textcolor = levelColor, size = size.tiny)
     if isHigh
         array.push(eqHighLevels, level)
         array.push(eqHighLines, ln)
@@ -365,7 +849,7 @@ if array.size(eqHighLevels) > 0
             line.set_extend(ln, extend.none)
             line.set_x2(ln, bar_index)
             line.set_color(ln, color.new(bearColor, 25))
-            label.set_text(lb, "EQH  Taken ✓")
+            label.set_text(lb, labelEQHTaken)
             label.set_textcolor(lb, bearColor)
             array.remove(eqHighLevels, i)
             array.remove(eqHighLines, i)
@@ -386,7 +870,7 @@ if array.size(eqLowLevels) > 0
             line.set_extend(ln, extend.none)
             line.set_x2(ln, bar_index)
             line.set_color(ln, color.new(bullColor, 25))
-            label.set_text(lb, "EQL  Taken ✓")
+            label.set_text(lb, labelEQLTaken)
             label.set_textcolor(lb, bullColor)
             array.remove(eqLowLevels, i)
             array.remove(eqLowLines, i)
@@ -402,15 +886,19 @@ var int lastBSLSweepBar = na
 var int lastSSLSweepBar = na
 var string lastLiquidityEvent = "None"
 var float lastLiquidityLevel = na
+var float lastBSLSweepLevel = na
+var float lastSSLSweepLevel = na
 
 if buySideSweep
     lastBSLSweepBar := bar_index
     lastLiquidityLevel := pdhSweep ? pdh : pwhSweep ? pwh : eqhSweep ? eqhSweepLevel : internalBSLSweep ? lastIntHigh : lastExtHigh
+    lastBSLSweepLevel := lastLiquidityLevel
     lastLiquidityEvent := pdhSweep ? "PDH swept" : pwhSweep ? "PWH swept" : eqhSweep ? "EQH swept" : internalBSLSweep ? "Internal BSL swept" : "External BSL swept"
 
 if sellSideSweep
     lastSSLSweepBar := bar_index
     lastLiquidityLevel := pdlSweep ? pdl : pwlSweep ? pwl : eqlSweep ? eqlSweepLevel : internalSSLSweep ? lastIntLow : lastExtLow
+    lastSSLSweepLevel := lastLiquidityLevel
     lastLiquidityEvent := pdlSweep ? "PDL swept" : pwlSweep ? "PWL swept" : eqlSweep ? "EQL swept" : internalSSLSweep ? "Internal SSL swept" : "External SSL swept"
 
 recentBSLSweep = not na(lastBSLSweepBar) and bar_index - lastBSLSweepBar <= sweepToBreakBars
@@ -429,20 +917,20 @@ addLiquidityMark(string txt, float level, color markColor) =>
             line.delete(array.shift(liquidityLines))
             label.delete(array.shift(liquidityLabels))
 
-if buySideSweep
-    addLiquidityMark("BSL  Taken ✓", lastLiquidityLevel, bearColor)
-if sellSideSweep
-    addLiquidityMark("SSL  Taken ✓", lastLiquidityLevel, bullColor)
-
-plotshape(showSweepMarks and not showLiquidityLines and buySideSweep, "Buy-side sweep", shape.xcross, location.abovebar, liqColor, size = size.tiny, text = "BSL")
-plotshape(showSweepMarks and not showLiquidityLines and sellSideSweep, "Sell-side sweep", shape.xcross, location.belowbar, liqColor, size = size.tiny, text = "SSL")
+// Liquidity labels are drawn later, after OB validation, so BSL / SSL marks
+// only appear where an institutional footprint is confirmed.
+var int lastBSLMarkBar = na
+var int lastSSLMarkBar = na
+var float lastBSLMarkLevel = na
+var float lastSSLMarkLevel = na
 
 //=============================================================================
-// 8. MSS / BOS STATE ENGINE
-// MSS = internal break opposite current order flow, gated by sweep/displacement.
-// BOS = continuation break in current order flow.
-// External BOS = confirmed external continuation break.
+// 8. MARKET STRUCTURE ENGINE 2.0 — CLASSIFICATION & STATE
+// Direction state is explicit for internal and external structure.
+// BOS continues the prior state. CHoCH breaks against the prior state.
 //=============================================================================
+var int internalTrend = 0
+var int externalTrend = 0
 var int orderFlow = 0
 var string latestStructureEvent = "Waiting"
 var float latestStructureLevel = na
@@ -451,21 +939,37 @@ var bool latestStructureExternal = false
 
 bullSweepGate = not requireSweepBeforeMSS or recentSSLSweep
 bearSweepGate = not requireSweepBeforeMSS or recentBSLSweep
-
 bullBOSGate = not requireSweepBeforeBOS or recentSSLSweep
 bearBOSGate = not requireSweepBeforeBOS or recentBSLSweep
 
-bullMSS = internalBullBreakRaw and orderFlow == -1 and bullSweepGate and bullDisplacement
-bearMSS = internalBearBreakRaw and orderFlow == 1 and bearSweepGate and bearDisplacement
+bullStructureDisplacementGate = not requireDisplacementForStructure or bullDisplacement
+bearStructureDisplacementGate = not requireDisplacementForStructure or bearDisplacement
 
-// When order flow is not established, the first qualified internal break initializes it.
-// Once flow exists, continuation BOS must follow same-side liquidity and displacement.
-bullInternalBOS = internalBullBreakRaw and orderFlow != -1 and bullBOSGate and bullDisplacement
-bearInternalBOS = internalBearBreakRaw and orderFlow != 1 and bearBOSGate and bearDisplacement
+qualifiedInternalBullBreak = internalBullBreakRaw and bullStructureDisplacementGate
+qualifiedInternalBearBreak = internalBearBreakRaw and bearStructureDisplacementGate
+qualifiedExternalBullBreak = externalBullBreakRaw and bullStructureDisplacementGate
+qualifiedExternalBearBreak = externalBearBreakRaw and bearStructureDisplacementGate
 
-bullExternalBOS = externalBullBreakRaw and orderFlow == 1 and bullBOSGate and bullDisplacement
-bearExternalBOS = externalBearBreakRaw and orderFlow == -1 and bearBOSGate and bearDisplacement
+internalBullCHoCH = qualifiedInternalBullBreak and internalTrend == -1 and bullSweepGate
+internalBearCHoCH = qualifiedInternalBearBreak and internalTrend == 1 and bearSweepGate
+internalBullBOS = qualifiedInternalBullBreak and internalTrend != -1 and bullBOSGate
+internalBearBOS = qualifiedInternalBearBreak and internalTrend != 1 and bearBOSGate
 
+externalBullCHoCH = qualifiedExternalBullBreak and externalTrend == -1 and bullSweepGate
+externalBearCHoCH = qualifiedExternalBearBreak and externalTrend == 1 and bearSweepGate
+externalBullBOS = qualifiedExternalBullBreak and externalTrend != -1 and bullBOSGate
+externalBearBOS = qualifiedExternalBearBreak and externalTrend != 1 and bearBOSGate
+
+// Compatibility aliases used by downstream engines and existing alerts.
+bullMSS = internalBullCHoCH or externalBullCHoCH
+bearMSS = internalBearCHoCH or externalBearCHoCH
+bullInternalBOS = internalBullBOS
+bearInternalBOS = internalBearBOS
+bullExternalBOS = externalBullBOS
+bearExternalBOS = externalBearBOS
+
+// Consume every raw break once, even when a filter rejects classification.
+// A new confirmed pivot must appear before the same level can trigger again.
 if internalBullBreakRaw
     intHighArmed := false
 if internalBearBreakRaw
@@ -475,42 +979,160 @@ if externalBullBreakRaw
 if externalBearBreakRaw
     extLowArmed := false
 
-if bullMSS or bullInternalBOS
+if internalBullCHoCH or internalBullBOS
+    internalTrend := 1
+if internalBearCHoCH or internalBearBOS
+    internalTrend := -1
+if externalBullCHoCH or externalBullBOS
+    externalTrend := 1
+if externalBearCHoCH or externalBearBOS
+    externalTrend := -1
+
+// External structure leads the published order-flow state when available.
+if externalBullCHoCH or externalBullBOS
     orderFlow := 1
-if bearMSS or bearInternalBOS
+else if externalBearCHoCH or externalBearBOS
+    orderFlow := -1
+else if internalBullCHoCH or internalBullBOS
+    orderFlow := 1
+else if internalBearCHoCH or internalBearBOS
     orderFlow := -1
 
-// Persist the latest confirmed structure event for the dashboard and future modules.
-if bullMSS
+// Publish one deterministic dashboard event per bar. External events take priority.
+if externalBullCHoCH
     latestStructureEvent := "Bullish CHoCH"
-    latestStructureLevel := lastIntHigh
+    latestStructureLevel := lastExtHigh
     latestStructureBar := bar_index
-    latestStructureExternal := false
-else if bearMSS
+    latestStructureExternal := true
+else if externalBearCHoCH
     latestStructureEvent := "Bearish CHoCH"
-    latestStructureLevel := lastIntLow
+    latestStructureLevel := lastExtLow
     latestStructureBar := bar_index
-    latestStructureExternal := false
-else if bullExternalBOS
+    latestStructureExternal := true
+else if externalBullBOS
     latestStructureEvent := "Bullish BOS"
     latestStructureLevel := lastExtHigh
     latestStructureBar := bar_index
     latestStructureExternal := true
-else if bearExternalBOS
+else if externalBearBOS
     latestStructureEvent := "Bearish BOS"
     latestStructureLevel := lastExtLow
     latestStructureBar := bar_index
     latestStructureExternal := true
-else if bullInternalBOS
+else if internalBullCHoCH
+    latestStructureEvent := "Bullish CHoCH"
+    latestStructureLevel := lastIntHigh
+    latestStructureBar := bar_index
+    latestStructureExternal := false
+else if internalBearCHoCH
+    latestStructureEvent := "Bearish CHoCH"
+    latestStructureLevel := lastIntLow
+    latestStructureBar := bar_index
+    latestStructureExternal := false
+else if internalBullBOS
     latestStructureEvent := "Bullish BOS"
     latestStructureLevel := lastIntHigh
     latestStructureBar := bar_index
     latestStructureExternal := false
-else if bearInternalBOS
+else if internalBearBOS
     latestStructureEvent := "Bearish BOS"
     latestStructureLevel := lastIntLow
     latestStructureBar := bar_index
     latestStructureExternal := false
+
+// Stable outputs for downstream modules.
+bullStructureEvent = internalBullCHoCH or internalBullBOS or externalBullCHoCH or externalBullBOS
+bearStructureEvent = internalBearCHoCH or internalBearBOS or externalBearCHoCH or externalBearBOS
+externalStructureEvent = externalBullCHoCH or externalBearCHoCH or externalBullBOS or externalBearBOS
+
+//=============================================================================
+// 8A. SNIPER MODEL ENGINE PR1 / PR2 — PROTECTED LEVEL TRACKER
+// Tracks the protected high for bearish sniper setups and the protected low for
+// bullish sniper setups. Internal liquidity sweeps can remain valid, but a sweep
+// of the protected level invalidates / resets the sniper setup.
+// PR2 keeps this guard intact and adds internal sweep validation later in the execution flow.
+// PR3 adds HTF liquidity-zone context without changing protected-level behavior.
+//=============================================================================
+protectedHighBroken(float level) =>
+    not na(level) and (protectedLevelBreakMode == "Close Break" ? close > level : high > level)
+
+protectedLowBroken(float level) =>
+    not na(level) and (protectedLevelBreakMode == "Close Break" ? close < level : low < level)
+
+float newBearProtectedHigh = not na(lastExtHigh) ? lastExtHigh : lastIntHigh
+int newBearProtectedHighBar = not na(lastExtHigh) ? lastExtHighBar : lastIntHighBar
+float newBullProtectedLow = not na(lastExtLow) ? lastExtLow : lastIntLow
+int newBullProtectedLowBar = not na(lastExtLow) ? lastExtLowBar : lastIntLowBar
+
+var float sniperProtectedHigh = na
+var float sniperProtectedLow = na
+var int sniperProtectedHighBar = na
+var int sniperProtectedLowBar = na
+var int sniperProtectedHighSetBar = na
+var int sniperProtectedLowSetBar = na
+var bool sniperBearProtectedHighActive = false
+var bool sniperBullProtectedLowActive = false
+var bool sniperBearSetupInvalidated = false
+var bool sniperBullSetupInvalidated = false
+var string lastSniperInvalidationText = "None"
+
+if enableSniperModel and bearStructureEvent and not na(newBearProtectedHigh)
+    sniperProtectedHigh := newBearProtectedHigh
+    sniperProtectedHighBar := newBearProtectedHighBar
+    sniperProtectedHighSetBar := bar_index
+    sniperBearProtectedHighActive := true
+    sniperBearSetupInvalidated := false
+    lastSniperInvalidationText := "Bear protected high armed"
+
+if enableSniperModel and bullStructureEvent and not na(newBullProtectedLow)
+    sniperProtectedLow := newBullProtectedLow
+    sniperProtectedLowBar := newBullProtectedLowBar
+    sniperProtectedLowSetBar := bar_index
+    sniperBullProtectedLowActive := true
+    sniperBullSetupInvalidated := false
+    lastSniperInvalidationText := "Bull protected low armed"
+
+sniperBearProtectedHighSweptNow = enableSniperModel and sniperBearProtectedHighActive and not na(sniperProtectedHigh) and
+     not na(sniperProtectedHighSetBar) and bar_index > sniperProtectedHighSetBar and protectedHighBroken(sniperProtectedHigh)
+
+sniperBullProtectedLowSweptNow = enableSniperModel and sniperBullProtectedLowActive and not na(sniperProtectedLow) and
+     not na(sniperProtectedLowSetBar) and bar_index > sniperProtectedLowSetBar and protectedLowBroken(sniperProtectedLow)
+
+if sniperBearProtectedHighSweptNow
+    sniperBearProtectedHighActive := false
+    sniperBearSetupInvalidated := true
+    lastSniperInvalidationText := "Bear protected high swept"
+
+if sniperBullProtectedLowSweptNow
+    sniperBullProtectedLowActive := false
+    sniperBullSetupInvalidated := true
+    lastSniperInvalidationText := "Bull protected low swept"
+
+sniperProtectedHighText = not na(sniperProtectedHigh) ? str.tostring(sniperProtectedHigh, format.mintick) : "—"
+sniperProtectedLowText = not na(sniperProtectedLow) ? str.tostring(sniperProtectedLow, format.mintick) : "—"
+
+sniperBearGuardText = sniperBearSetupInvalidated ? "Bear PH swept / reset" :
+     sniperBearProtectedHighActive ? "Bear PH intact @ " + sniperProtectedHighText : "Bear PH waiting"
+
+sniperBullGuardText = sniperBullSetupInvalidated ? "Bull PL swept / reset" :
+     sniperBullProtectedLowActive ? "Bull PL intact @ " + sniperProtectedLowText : "Bull PL waiting"
+
+sniperProtectedGuardText = orderFlow == -1 ? sniperBearGuardText :
+     orderFlow == 1 ? sniperBullGuardText :
+     sniperBearProtectedHighActive ? sniperBearGuardText :
+     sniperBullProtectedLowActive ? sniperBullGuardText : "Protected level waiting"
+
+sniperProtectedGuardColor = str.contains(sniperProtectedGuardText, "swept") ? bearColor :
+     str.contains(sniperProtectedGuardText, "intact") ? bullColor : neutralColor
+
+plot(showSniperProtectedLevels and enableSniperModel ? sniperProtectedHigh : na, "Sniper Protected High", color = color.new(bearColor, 20), style = plot.style_linebr)
+plot(showSniperProtectedLevels and enableSniperModel ? sniperProtectedLow : na, "Sniper Protected Low", color = color.new(bullColor, 20), style = plot.style_linebr)
+// Disabled debug data-window plot to stay under TradingView 64-plot limit: plot(showSniperDebug ? sniperProtectedHigh : na, "Sniper Protected High Value", display = display.data_window)
+// Disabled debug data-window plot to stay under TradingView 64-plot limit: plot(showSniperDebug ? sniperProtectedLow : na, "Sniper Protected Low Value", display = display.data_window)
+// Disabled debug data-window plot to stay under TradingView 64-plot limit: plot(showSniperDebug ? (sniperBearProtectedHighSweptNow ? 1 : 0) : na, "Sniper Bear Protected High Swept", display = display.data_window)
+// Disabled debug data-window plot to stay under TradingView 64-plot limit: plot(showSniperDebug ? (sniperBullProtectedLowSweptNow ? 1 : 0) : na, "Sniper Bull Protected Low Swept", display = display.data_window)
+// Disabled debug data-window plot to stay under TradingView 64-plot limit: plot(showSniperDebug ? (sniperBearProtectedHighActive ? 1 : 0) : na, "Sniper Bear Protected High Active", display = display.data_window)
+// Disabled debug data-window plot to stay under TradingView 64-plot limit: plot(showSniperDebug ? (sniperBullProtectedLowActive ? 1 : 0) : na, "Sniper Bull Protected Low Active", display = display.data_window)
 
 //=============================================================================
 // 9. ORDER BLOCK / FVG CANDIDATES
@@ -550,8 +1172,6 @@ bearFVGBottomCandidate = bearFVGNow ? high : na
 // 10. SCORE + QUALIFICATION
 // Bias 25, liquidity 20, displacement 15, MSS/BOS 20, OB 10, FVG 5, time 5.
 //=============================================================================
-bullStructureEvent = bullMSS or bullExternalBOS or bullInternalBOS
-bearStructureEvent = bearMSS or bearExternalBOS or bearInternalBOS
 
 bullOBOK = not na(bullOBOffset)
 bearOBOK = not na(bearOBOffset)
@@ -596,7 +1216,7 @@ bearQualified = bearStructureEvent and bearBias and recentBSLSweep and bearDispl
 
 //=============================================================================
 // 11. INSTITUTIONAL MARKET-STRUCTURE LINES
-// Tiny text with dashed lines anchored to the broken swing level and extended past the break.
+// Readable text with dashed lines anchored to the broken swing level and terminating at the structure break.
 //=============================================================================
 var array<line> structureLines = array.new<line>()
 var array<label> structureLabels = array.new<label>()
@@ -606,12 +1226,11 @@ addStructureMark(string txt, int swingBar, float level, color markColor, bool ex
         int configuredLength = externalEvent ? externalStructureLineBars : internalStructureLineBars
         int fallbackLeft = bar_index - configuredLength
         int requestedLeft = anchorStructureAtSwing and not na(swingBar) ? swingBar : fallbackLeft
-        int leftBar = math.max(fallbackLeft, requestedLeft)
-        int rightBar = bar_index + structureForwardBars
+        int leftBar = requestedLeft
+        int rightBar = bar_index
         int centerBar = leftBar + int(math.floor((rightBar - leftBar) / 2.0))
-        int nearBreakBar = math.max(leftBar, bar_index - 1)
-        int textBar = structureLabelPosition == "Centered" ? centerBar : nearBreakBar
-        int internalFade = fadeInternalStructure ? 35 : 10
+        int textBar = centerBar
+        int internalFade = fadeInternalStructure ? 20 : 5
         color eventColor = externalEvent ? color.new(markColor, 0) : color.new(markColor, internalFade)
         line ln = line.new(
              leftBar, level, rightBar, level,
@@ -621,7 +1240,10 @@ addStructureMark(string txt, int swingBar, float level, color markColor, bool ex
         label lb = label.new(
              textBar, level, txt,
              xloc = xloc.bar_index, yloc = yloc.price,
-             style = label.style_none, textcolor = eventColor, size = size.tiny
+             style = label.style_label_left,
+             color = color.new(color.black, 15),
+             textcolor = eventColor,
+             size = size.normal
          )
         array.push(structureLines, ln)
         array.push(structureLabels, lb)
@@ -629,18 +1251,979 @@ addStructureMark(string txt, int swingBar, float level, color markColor, bool ex
             line.delete(array.shift(structureLines))
             label.delete(array.shift(structureLabels))
 
-if showInternalEvents and bullMSS
-    addStructureMark("CHoCH", lastIntHighBar, lastIntHigh, chochBullColor, false)
-if showInternalEvents and bearMSS
-    addStructureMark("CHoCH", lastIntLowBar, lastIntLow, chochBearColor, false)
-if showInternalEvents and bullInternalBOS
-    addStructureMark("BOS", lastIntHighBar, lastIntHigh, bullColor, false)
-if showInternalEvents and bearInternalBOS
-    addStructureMark("BOS", lastIntLowBar, lastIntLow, bearColor, false)
-if showExternalEvents and bullExternalBOS
-    addStructureMark("BOS", lastExtHighBar, lastExtHigh, bullColor, true)
-if showExternalEvents and bearExternalBOS
-    addStructureMark("BOS", lastExtLowBar, lastExtLow, bearColor, true)
+addZigZagStructureMark(string txt, int swingBar, int breakBar, float level, color markColor) =>
+    if showStructureLines and showZigZagStructureEvents and not na(level) and not na(swingBar) and not na(breakBar)
+        int leftBar = swingBar
+        int rightBar = math.max(swingBar + 1, breakBar)
+        int centerBar = leftBar + int(math.floor((rightBar - leftBar) / 2.0))
+        line ln = line.new(
+             leftBar, level, rightBar, level,
+             xloc = xloc.bar_index, extend = extend.none,
+             color = color.new(markColor, 0), width = math.max(structureLineWidth, 2), style = line.style_dashed
+         )
+        label lb = label.new(
+             centerBar, level, txt,
+             xloc = xloc.bar_index, yloc = yloc.price,
+             style = label.style_label_left,
+             color = color.new(color.black, 0),
+             textcolor = markColor,
+             size = size.normal
+         )
+        array.push(structureLines, ln)
+        array.push(structureLabels, lb)
+        if array.size(structureLines) > maxLabels
+            line.delete(array.shift(structureLines))
+            label.delete(array.shift(structureLabels))
+
+if showInternalEvents and internalBullCHoCH
+    addStructureMark(labelBullCHoCH, lastIntHighBar, lastIntHigh, chochBullColor, false)
+if showInternalEvents and internalBearCHoCH
+    addStructureMark(labelBearCHoCH, lastIntLowBar, lastIntLow, chochBearColor, false)
+if showInternalEvents and internalBullBOS
+    addStructureMark(labelBullBOS, lastIntHighBar, lastIntHigh, bullColor, false)
+if showInternalEvents and internalBearBOS
+    addStructureMark(labelBearBOS, lastIntLowBar, lastIntLow, bearColor, false)
+if showExternalEvents and externalBullCHoCH
+    addStructureMark(labelBullCHoCH, lastExtHighBar, lastExtHigh, chochBullColor, true)
+if showExternalEvents and externalBearCHoCH
+    addStructureMark(labelBearCHoCH, lastExtLowBar, lastExtLow, chochBearColor, true)
+if showExternalEvents and externalBullBOS
+    addStructureMark(labelBullBOS, lastExtHighBar, lastExtHigh, bullColor, true)
+if showExternalEvents and externalBearBOS
+    addStructureMark(labelBearBOS, lastExtLowBar, lastExtLow, bearColor, true)
+
+
+//=============================================================================
+// 11A. ZIG ZAG MARKET STRUCTURE OVERLAY — PR1 / PR2 / PR3
+// Uses confirmed swing highs / lows only. This keeps the overlay clean, avoids
+// repainting the current candle, and does not add TradingView plot usage.
+// PR3 classifies the latest HH / HL / LH / LL sequence as bullish, bearish, transition, or mixed structure.
+//=============================================================================
+zigZagSourceIsInternal = zigZagSwingSource == "Internal"
+zigZagHighPivot = zigZagSourceIsInternal ? intPH : extPH
+zigZagLowPivot = zigZagSourceIsInternal ? intPL : extPL
+zigZagHighPivotBar = zigZagSourceIsInternal ? bar_index - internalLen : bar_index - externalLen
+zigZagLowPivotBar = zigZagSourceIsInternal ? bar_index - internalLen : bar_index - externalLen
+
+zigZagRawLabel(string rawText) =>
+    zigZagLabelMode == "Full" ?
+         rawText == "HH" ? "Higher High" :
+         rawText == "HL" ? "Higher Low" :
+         rawText == "LH" ? "Lower High" :
+         rawText == "LL" ? "Lower Low" :
+         rawText == "H" ? "High" :
+         rawText == "L" ? "Low" : rawText :
+     rawText
+
+zigZagPriceLabel(string rawText, float pivotPrice, bool isHigh) =>
+    string structureText = zigZagRawLabel(rawText)
+    string priceText = str.tostring(pivotPrice, format.mintick)
+    isHigh ? priceText + "\n" + structureText : structureText + "\n" + priceText
+
+zigZagHighLabelY(float pivotPrice) =>
+    pivotPrice + atr * zigZagPriceLabelOffsetATR
+
+zigZagLowLabelY(float pivotPrice) =>
+    pivotPrice - atr * zigZagPriceLabelOffsetATR
+
+var array<line> zigZagLines = array.new<line>()
+var array<label> zigZagLabels = array.new<label>()
+
+var float zigZagLastPivotPrice = na
+var int zigZagLastPivotBar = na
+var int zigZagLastPivotType = 0
+var float zigZagLastHighPrice = na
+var float zigZagLastLowPrice = na
+var int zigZagLastHighBar = na
+var int zigZagLastLowBar = na
+var float zigZagPreviousHighPrice = na
+var float zigZagPreviousLowPrice = na
+var int zigZagPreviousHighBar = na
+var int zigZagPreviousLowBar = na
+var string zigZagPreviousHighMarkText = "—"
+var string zigZagPreviousLowMarkText = "—"
+var bool zigZagPivotBullBOS = false
+var bool zigZagPivotBearBOS = false
+var bool zigZagPivotBullCHoCH = false
+var bool zigZagPivotBearCHoCH = false
+var float zigZagPivotBrokenLevel = na
+var int zigZagPivotBrokenBar = na
+var int zigZagPivotBreakBar = na
+var float zigZagCurrentCompareHigh = na
+var float zigZagCurrentCompareLow = na
+var float zigZagLegStartPrice = na
+var float zigZagLegEndPrice = na
+var int zigZagLegStartBar = na
+var int zigZagLegEndBar = na
+var int zigZagLegDirection = 0
+var line zigZagLastLine = na
+var label zigZagLastLabel = na
+var string zigZagLastMarkText = "—"
+var string zigZagLastHighMarkText = "—"
+var string zigZagLastLowMarkText = "—"
+var string zigZagStructureText = "Waiting"
+var string zigZagTrendText = "Waiting"
+var color zigZagStructureColor = neutralColor
+var color zigZagTrendColor = neutralColor
+
+zigZagHighEvent = showZigZag and not na(zigZagHighPivot)
+zigZagLowEvent = showZigZag and not na(zigZagLowPivot)
+
+zigZagPivotBullBOS := false
+zigZagPivotBearBOS := false
+zigZagPivotBullCHoCH := false
+zigZagPivotBearCHoCH := false
+zigZagPivotBrokenLevel := na
+zigZagPivotBrokenBar := na
+zigZagPivotBreakBar := na
+
+if zigZagHighEvent
+    bool continuingHighSwing = zigZagLastPivotType == 1
+    float highComparePrice = continuingHighSwing ? zigZagCurrentCompareHigh : zigZagLastHighPrice
+    string highMarkText = na(highComparePrice) ? "H" : zigZagHighPivot > highComparePrice ? "HH" : "LH"
+    color highMarkColor = highMarkText == "HH" ? bullColor : highMarkText == "LH" ? bearColor : neutralColor
+
+    if zigZagLastPivotType == 1
+        bool replaceHigh = na(zigZagLastPivotPrice) or zigZagHighPivot >= zigZagLastPivotPrice
+        if replaceHigh
+            zigZagLastPivotPrice := zigZagHighPivot
+            zigZagLastPivotBar := zigZagHighPivotBar
+            zigZagLastHighPrice := zigZagHighPivot
+            zigZagLastHighBar := zigZagHighPivotBar
+            zigZagLegEndPrice := zigZagHighPivot
+            zigZagLegEndBar := zigZagHighPivotBar
+            zigZagLegDirection := 1
+            zigZagLastMarkText := highMarkText
+            zigZagLastHighMarkText := highMarkText
+            zigZagStructureText := zigZagSwingSource + " " + highMarkText
+            zigZagStructureColor := highMarkColor
+
+            if not na(zigZagLastLine)
+                line.set_x2(zigZagLastLine, zigZagHighPivotBar)
+                line.set_y2(zigZagLastLine, zigZagHighPivot)
+
+            if showZigZagLabels and zigZagLabelMode != "Off" and not na(zigZagLastLabel)
+                label.set_x(zigZagLastLabel, zigZagHighPivotBar)
+                label.set_y(zigZagLastLabel, zigZagHighLabelY(zigZagHighPivot))
+                label.set_text(zigZagLastLabel, zigZagPriceLabel(highMarkText, zigZagHighPivot, true))
+                label.set_textcolor(zigZagLastLabel, highMarkColor)
+                label.set_style(zigZagLastLabel, label.style_label_down)
+                label.set_color(zigZagLastLabel, color.new(color.black, 20))
+                label.set_size(zigZagLastLabel, size.small)
+    else
+        line newZigLine = na
+        label newZigLabel = na
+
+        zigZagPreviousHighPrice := zigZagLastHighPrice
+        zigZagPreviousHighBar := zigZagLastHighBar
+        zigZagPreviousHighMarkText := zigZagLastHighMarkText
+
+        bool newHighBreaksPriorHigh = highMarkText == "HH" and not na(zigZagPreviousHighPrice) and not na(zigZagPreviousHighBar)
+        zigZagPivotBullCHoCH := showZigZagStructureEvents and newHighBreaksPriorHigh and zigZagPreviousHighMarkText == "LH"
+        zigZagPivotBullBOS := showZigZagStructureEvents and newHighBreaksPriorHigh and zigZagPreviousHighMarkText == "HH"
+        if zigZagPivotBullCHoCH or zigZagPivotBullBOS
+            zigZagPivotBrokenLevel := zigZagPreviousHighPrice
+            zigZagPivotBrokenBar := zigZagPreviousHighBar
+            zigZagPivotBreakBar := zigZagHighPivotBar
+
+        if not na(zigZagLastPivotPrice) and not na(zigZagLastPivotBar)
+            newZigLine := line.new(
+                 zigZagLastPivotBar, zigZagLastPivotPrice,
+                 zigZagHighPivotBar, zigZagHighPivot,
+                 xloc = xloc.bar_index,
+                 extend = extend.none,
+                 color = color.new(highMarkColor, 15),
+                 width = zigZagLineWidth
+             )
+            array.push(zigZagLines, newZigLine)
+
+        if showZigZagLabels and zigZagLabelMode != "Off"
+            newZigLabel := label.new(
+                 zigZagHighPivotBar, zigZagHighLabelY(zigZagHighPivot),
+                 zigZagPriceLabel(highMarkText, zigZagHighPivot, true),
+                 xloc = xloc.bar_index,
+                 yloc = yloc.price,
+                 style = label.style_label_down,
+                 color = color.new(color.black, 20),
+                 textcolor = highMarkColor,
+                 size = size.small
+             )
+            array.push(zigZagLabels, newZigLabel)
+
+        while array.size(zigZagLines) > maxZigZagLegs
+            line oldZigLine = array.shift(zigZagLines)
+            if not na(oldZigLine)
+                line.delete(oldZigLine)
+
+        while array.size(zigZagLabels) > maxZigZagLegs + 1
+            label oldZigLabel = array.shift(zigZagLabels)
+            if not na(oldZigLabel)
+                label.delete(oldZigLabel)
+
+        if not na(zigZagLastPivotPrice) and not na(zigZagLastPivotBar)
+            zigZagLegStartPrice := zigZagLastPivotPrice
+            zigZagLegStartBar := zigZagLastPivotBar
+            zigZagLegEndPrice := zigZagHighPivot
+            zigZagLegEndBar := zigZagHighPivotBar
+            zigZagLegDirection := 1
+
+        zigZagCurrentCompareHigh := zigZagLastHighPrice
+        zigZagLastHighPrice := zigZagHighPivot
+        zigZagLastHighBar := zigZagHighPivotBar
+        zigZagLastPivotPrice := zigZagHighPivot
+        zigZagLastPivotBar := zigZagHighPivotBar
+        zigZagLastPivotType := 1
+        zigZagLastLine := newZigLine
+        zigZagLastLabel := newZigLabel
+        zigZagLastMarkText := highMarkText
+        zigZagLastHighMarkText := highMarkText
+        zigZagStructureText := zigZagSwingSource + " " + highMarkText
+        zigZagStructureColor := highMarkColor
+
+if zigZagLowEvent
+    bool continuingLowSwing = zigZagLastPivotType == -1
+    float lowComparePrice = continuingLowSwing ? zigZagCurrentCompareLow : zigZagLastLowPrice
+    string lowMarkText = na(lowComparePrice) ? "L" : zigZagLowPivot > lowComparePrice ? "HL" : "LL"
+    color lowMarkColor = lowMarkText == "HL" ? bullColor : lowMarkText == "LL" ? bearColor : neutralColor
+
+    if zigZagLastPivotType == -1
+        bool replaceLow = na(zigZagLastPivotPrice) or zigZagLowPivot <= zigZagLastPivotPrice
+        if replaceLow
+            zigZagLastPivotPrice := zigZagLowPivot
+            zigZagLastPivotBar := zigZagLowPivotBar
+            zigZagLastLowPrice := zigZagLowPivot
+            zigZagLastLowBar := zigZagLowPivotBar
+            zigZagLegEndPrice := zigZagLowPivot
+            zigZagLegEndBar := zigZagLowPivotBar
+            zigZagLegDirection := -1
+            zigZagLastMarkText := lowMarkText
+            zigZagLastLowMarkText := lowMarkText
+            zigZagStructureText := zigZagSwingSource + " " + lowMarkText
+            zigZagStructureColor := lowMarkColor
+
+            if not na(zigZagLastLine)
+                line.set_x2(zigZagLastLine, zigZagLowPivotBar)
+                line.set_y2(zigZagLastLine, zigZagLowPivot)
+
+            if showZigZagLabels and zigZagLabelMode != "Off" and not na(zigZagLastLabel)
+                label.set_x(zigZagLastLabel, zigZagLowPivotBar)
+                label.set_y(zigZagLastLabel, zigZagLowLabelY(zigZagLowPivot))
+                label.set_text(zigZagLastLabel, zigZagPriceLabel(lowMarkText, zigZagLowPivot, false))
+                label.set_textcolor(zigZagLastLabel, lowMarkColor)
+                label.set_style(zigZagLastLabel, label.style_label_up)
+                label.set_color(zigZagLastLabel, color.new(color.black, 20))
+                label.set_size(zigZagLastLabel, size.small)
+    else
+        line newZigLine = na
+        label newZigLabel = na
+
+        zigZagPreviousLowPrice := zigZagLastLowPrice
+        zigZagPreviousLowBar := zigZagLastLowBar
+        zigZagPreviousLowMarkText := zigZagLastLowMarkText
+
+        bool newLowBreaksPriorLow = lowMarkText == "LL" and not na(zigZagPreviousLowPrice) and not na(zigZagPreviousLowBar)
+        zigZagPivotBearCHoCH := showZigZagStructureEvents and newLowBreaksPriorLow and zigZagPreviousLowMarkText == "HL"
+        zigZagPivotBearBOS := showZigZagStructureEvents and newLowBreaksPriorLow and zigZagPreviousLowMarkText == "LL"
+        if zigZagPivotBearCHoCH or zigZagPivotBearBOS
+            zigZagPivotBrokenLevel := zigZagPreviousLowPrice
+            zigZagPivotBrokenBar := zigZagPreviousLowBar
+            zigZagPivotBreakBar := zigZagLowPivotBar
+
+        if not na(zigZagLastPivotPrice) and not na(zigZagLastPivotBar)
+            newZigLine := line.new(
+                 zigZagLastPivotBar, zigZagLastPivotPrice,
+                 zigZagLowPivotBar, zigZagLowPivot,
+                 xloc = xloc.bar_index,
+                 extend = extend.none,
+                 color = color.new(lowMarkColor, 15),
+                 width = zigZagLineWidth
+             )
+            array.push(zigZagLines, newZigLine)
+
+        if showZigZagLabels and zigZagLabelMode != "Off"
+            newZigLabel := label.new(
+                 zigZagLowPivotBar, zigZagLowLabelY(zigZagLowPivot),
+                 zigZagPriceLabel(lowMarkText, zigZagLowPivot, false),
+                 xloc = xloc.bar_index,
+                 yloc = yloc.price,
+                 style = label.style_label_up,
+                 color = color.new(color.black, 20),
+                 textcolor = lowMarkColor,
+                 size = size.small
+             )
+            array.push(zigZagLabels, newZigLabel)
+
+        while array.size(zigZagLines) > maxZigZagLegs
+            line oldZigLine = array.shift(zigZagLines)
+            if not na(oldZigLine)
+                line.delete(oldZigLine)
+
+        while array.size(zigZagLabels) > maxZigZagLegs + 1
+            label oldZigLabel = array.shift(zigZagLabels)
+            if not na(oldZigLabel)
+                label.delete(oldZigLabel)
+
+        if not na(zigZagLastPivotPrice) and not na(zigZagLastPivotBar)
+            zigZagLegStartPrice := zigZagLastPivotPrice
+            zigZagLegStartBar := zigZagLastPivotBar
+            zigZagLegEndPrice := zigZagLowPivot
+            zigZagLegEndBar := zigZagLowPivotBar
+            zigZagLegDirection := -1
+
+        zigZagCurrentCompareLow := zigZagLastLowPrice
+        zigZagLastLowPrice := zigZagLowPivot
+        zigZagLastLowBar := zigZagLowPivotBar
+        zigZagLastPivotPrice := zigZagLowPivot
+        zigZagLastPivotBar := zigZagLowPivotBar
+        zigZagLastPivotType := -1
+        zigZagLastLine := newZigLine
+        zigZagLastLabel := newZigLabel
+        zigZagLastMarkText := lowMarkText
+        zigZagLastLowMarkText := lowMarkText
+        zigZagStructureText := zigZagSwingSource + " " + lowMarkText
+        zigZagStructureColor := lowMarkColor
+
+if zigZagPivotBullCHoCH
+    addZigZagStructureMark("CHoCH", zigZagPivotBrokenBar, zigZagPivotBreakBar, zigZagPivotBrokenLevel, chochBullColor)
+
+if zigZagPivotBearCHoCH
+    addZigZagStructureMark("CHoCH", zigZagPivotBrokenBar, zigZagPivotBreakBar, zigZagPivotBrokenLevel, chochBearColor)
+
+if zigZagPivotBullBOS
+    addZigZagStructureMark("BOS", zigZagPivotBrokenBar, zigZagPivotBreakBar, zigZagPivotBrokenLevel, bullColor)
+
+if zigZagPivotBearBOS
+    addZigZagStructureMark("BOS", zigZagPivotBrokenBar, zigZagPivotBreakBar, zigZagPivotBrokenLevel, bearColor)
+
+zigZagHasAnyHigh = zigZagLastHighMarkText != "—"
+zigZagHasAnyLow = zigZagLastLowMarkText != "—"
+zigZagHasClassifiedHigh = zigZagLastHighMarkText == "HH" or zigZagLastHighMarkText == "LH"
+zigZagHasClassifiedLow = zigZagLastLowMarkText == "HL" or zigZagLastLowMarkText == "LL"
+zigZagBullStructure = zigZagLastHighMarkText == "HH" and zigZagLastLowMarkText == "HL"
+zigZagBearStructure = zigZagLastHighMarkText == "LH" and zigZagLastLowMarkText == "LL"
+zigZagTransitionStructure = zigZagHasClassifiedHigh and zigZagHasClassifiedLow and not zigZagBullStructure and not zigZagBearStructure
+
+zigZagTrendText := not showZigZag ? "Off" :
+     (not zigZagHasAnyHigh or not zigZagHasAnyLow) ? "Waiting" :
+     (not zigZagHasClassifiedHigh or not zigZagHasClassifiedLow) ? "Range / Mixed" :
+     zigZagBullStructure ? "Bullish Structure" :
+     zigZagBearStructure ? "Bearish Structure" :
+     zigZagTransitionStructure ? "Transition" : "Range / Mixed"
+
+zigZagTrendColor := not showZigZag ? neutralColor :
+     zigZagBullStructure ? bullColor :
+     zigZagBearStructure ? bearColor :
+     zigZagTransitionStructure ? liqColor : neutralColor
+
+zigZagDashboardText = not showZigZag ? "Off" :
+     zigZagTrendText == "Waiting" ? "Waiting for swings" :
+     zigZagTrendText + " / " + zigZagSwingSource + " " + zigZagLastMarkText
+
+zigZagDashboardColor = not showZigZag ? neutralColor : zigZagTrendColor
+
+//=============================================================================
+// 11C. INSTITUTIONAL FOOTPRINT ALIGNMENT ENGINE — PR1 / PR2 / PR3 / PR5 / PR6 / PR7 / PR8 / PR9 / PR10 / PR11 / PR12 / PR13 / PR14
+// PR1 adds a Zig Zag structure gate for BOS / CHoCH quality.
+// PR2 separates normal BOS / CHoCH events from institutional-quality structure
+// events by requiring the Zig Zag gate, liquidity context, displacement, and
+// imbalance / FVG footprint.
+// PR3 adds order-block leg alignment so OB quality must fit the active Zig Zag
+// structure leg.
+// PR5 maps readable BOS / CHoCH lines from the previous Zig Zag swing to the new confirmed break swing.
+// PR6 adds liquidity void / imbalance alignment quality.
+// PR7 adds bullish / bearish Judas swing detection.
+// PR8 adds a final institutional footprint summary.
+// PR9 adds a footprint permission gate.
+// PR10 adds non-repeating footprint permission alerts.
+// PR11 adds an optional BUY / SELL permission gate that is off by default.
+// PR12 adds a Decision Gate Audit Panel so the dashboard shows whether IFA is off, passed, or blocking.
+// PR13 polishes IFA Gate Test Mode wording so blocked and passed states are easier to understand.
+// PR14 completes the final IFA module review before branch merge. No behavior changes are added.
+//=============================================================================
+ifaBullZigZagGate = enableInstitutionalFootprintAlignment and showZigZag and
+     (zigZagBullStructure or (ifaAllowTransitionStructure and zigZagTransitionStructure))
+
+ifaBearZigZagGate = enableInstitutionalFootprintAlignment and showZigZag and
+     (zigZagBearStructure or (ifaAllowTransitionStructure and zigZagTransitionStructure))
+
+ifaBullStructureAlignedNow = enableInstitutionalFootprintAlignment and bullStructureEvent and ifaBullZigZagGate
+ifaBearStructureAlignedNow = enableInstitutionalFootprintAlignment and bearStructureEvent and ifaBearZigZagGate
+
+ifaBullStructureRejectedNow = enableInstitutionalFootprintAlignment and bullStructureEvent and not ifaBullZigZagGate
+ifaBearStructureRejectedNow = enableInstitutionalFootprintAlignment and bearStructureEvent and not ifaBearZigZagGate
+
+var int ifaLastBullImbalanceBar = na
+var int ifaLastBearImbalanceBar = na
+var float ifaLastBullImbalanceTop = na
+var float ifaLastBullImbalanceBottom = na
+var float ifaLastBearImbalanceTop = na
+var float ifaLastBearImbalanceBottom = na
+
+if bullFVGOK
+    ifaLastBullImbalanceBar := bar_index
+    ifaLastBullImbalanceTop := bullFVGTopCandidate
+    ifaLastBullImbalanceBottom := bullFVGBottomCandidate
+
+if bearFVGOK
+    ifaLastBearImbalanceBar := bar_index
+    ifaLastBearImbalanceTop := bearFVGTopCandidate
+    ifaLastBearImbalanceBottom := bearFVGBottomCandidate
+
+ifaBullImbalanceFresh = not na(ifaLastBullImbalanceBar) and bar_index - ifaLastBullImbalanceBar <= ifaImbalanceMemoryBars
+ifaBearImbalanceFresh = not na(ifaLastBearImbalanceBar) and bar_index - ifaLastBearImbalanceBar <= ifaImbalanceMemoryBars
+
+ifaBullLiquidityContext = not ifaRequireLiquidityForQuality or recentSSLSweep
+ifaBearLiquidityContext = not ifaRequireLiquidityForQuality or recentBSLSweep
+
+ifaBullDisplacementContext = not ifaRequireDisplacementForQuality or bullDisplacement or recentBullDisplacement
+ifaBearDisplacementContext = not ifaRequireDisplacementForQuality or bearDisplacement or recentBearDisplacement
+
+ifaBullImbalanceContext = not ifaRequireImbalanceForQuality or ifaBullImbalanceFresh
+ifaBearImbalanceContext = not ifaRequireImbalanceForQuality or ifaBearImbalanceFresh
+
+ifaBullBOSNow = internalBullBOS or externalBullBOS
+ifaBearBOSNow = internalBearBOS or externalBearBOS
+ifaBullCHoCHNow = internalBullCHoCH or externalBullCHoCH
+ifaBearCHoCHNow = internalBearCHoCH or externalBearCHoCH
+
+ifaBullMappedBOSNow = ifaBullBOSNow or zigZagPivotBullBOS
+ifaBearMappedBOSNow = ifaBearBOSNow or zigZagPivotBearBOS
+ifaBullMappedCHoCHNow = ifaBullCHoCHNow or zigZagPivotBullCHoCH
+ifaBearMappedCHoCHNow = ifaBearCHoCHNow or zigZagPivotBearCHoCH
+ifaBullMappedStructureNow = ifaBullMappedBOSNow or ifaBullMappedCHoCHNow
+ifaBearMappedStructureNow = ifaBearMappedBOSNow or ifaBearMappedCHoCHNow
+
+ifaBullQualityReady = ifaBullZigZagGate and ifaBullLiquidityContext and ifaBullDisplacementContext and ifaBullImbalanceContext
+ifaBearQualityReady = ifaBearZigZagGate and ifaBearLiquidityContext and ifaBearDisplacementContext and ifaBearImbalanceContext
+
+institutionalBullBOSQuality = enableInstitutionalFootprintAlignment and ifaBullBOSNow and ifaBullQualityReady
+institutionalBearBOSQuality = enableInstitutionalFootprintAlignment and ifaBearBOSNow and ifaBearQualityReady
+institutionalBullCHoCHQuality = enableInstitutionalFootprintAlignment and ifaBullCHoCHNow and ifaBullQualityReady
+institutionalBearCHoCHQuality = enableInstitutionalFootprintAlignment and ifaBearCHoCHNow and ifaBearQualityReady
+
+// Stable aliases for future footprint PRs. These are intentionally not wired into BUY / SELL logic yet.
+institutionalBullStructureQuality = institutionalBullBOSQuality or institutionalBullCHoCHQuality
+institutionalBearStructureQuality = institutionalBearBOSQuality or institutionalBearCHoCHQuality
+institutionalStructureQuality = institutionalBullStructureQuality or institutionalBearStructureQuality
+
+ifaZigZagLegReady = not na(zigZagLegStartPrice) and not na(zigZagLegEndPrice) and
+     not na(zigZagLegStartBar) and not na(zigZagLegEndBar) and zigZagLegDirection != 0
+
+int ifaZigZagLegLeftBar = ifaZigZagLegReady ? math.min(zigZagLegStartBar, zigZagLegEndBar) : na
+int ifaZigZagLegRightBar = ifaZigZagLegReady ? math.max(zigZagLegStartBar, zigZagLegEndBar) : na
+float ifaZigZagLegTop = ifaZigZagLegReady ? math.max(zigZagLegStartPrice, zigZagLegEndPrice) : na
+float ifaZigZagLegBottom = ifaZigZagLegReady ? math.min(zigZagLegStartPrice, zigZagLegEndPrice) : na
+
+int ifaBullImbalanceBar = ifaBullImbalanceFresh ? ifaLastBullImbalanceBar : na
+int ifaBearImbalanceBar = ifaBearImbalanceFresh ? ifaLastBearImbalanceBar : na
+
+ifaBullImbalanceDirectionAligned = not ifaRequireImbalanceLegAlignment or zigZagLegDirection == 1
+ifaBearImbalanceDirectionAligned = not ifaRequireImbalanceLegAlignment or zigZagLegDirection == -1
+
+ifaBullImbalanceBarAligned = not ifaRequireImbalanceLegAlignment or (
+     ifaZigZagLegReady and not na(ifaBullImbalanceBar) and
+     ifaBullImbalanceBar >= ifaZigZagLegLeftBar and
+     ifaBullImbalanceBar <= ifaZigZagLegRightBar + ifaAlignmentMemoryBars
+)
+
+ifaBearImbalanceBarAligned = not ifaRequireImbalanceLegAlignment or (
+     ifaZigZagLegReady and not na(ifaBearImbalanceBar) and
+     ifaBearImbalanceBar >= ifaZigZagLegLeftBar and
+     ifaBearImbalanceBar <= ifaZigZagLegRightBar + ifaAlignmentMemoryBars
+)
+
+ifaBullImbalancePriceAligned = not ifaRequireImbalanceLegAlignment or (
+     ifaZigZagLegReady and ifaBullImbalanceFresh and
+     ifaLastBullImbalanceTop <= ifaZigZagLegTop + atr * ifaImbalanceLegToleranceATR and
+     ifaLastBullImbalanceBottom >= ifaZigZagLegBottom - atr * ifaImbalanceLegToleranceATR
+)
+
+ifaBearImbalancePriceAligned = not ifaRequireImbalanceLegAlignment or (
+     ifaZigZagLegReady and ifaBearImbalanceFresh and
+     ifaLastBearImbalanceTop <= ifaZigZagLegTop + atr * ifaImbalanceLegToleranceATR and
+     ifaLastBearImbalanceBottom >= ifaZigZagLegBottom - atr * ifaImbalanceLegToleranceATR
+)
+
+ifaBullImbalanceLegAligned = not ifaRequireImbalanceLegAlignment or (
+     ifaZigZagLegReady and ifaBullImbalanceDirectionAligned and ifaBullImbalanceBarAligned and ifaBullImbalancePriceAligned
+)
+
+ifaBearImbalanceLegAligned = not ifaRequireImbalanceLegAlignment or (
+     ifaZigZagLegReady and ifaBearImbalanceDirectionAligned and ifaBearImbalanceBarAligned and ifaBearImbalancePriceAligned
+)
+
+institutionalBullImbalanceQuality = enableInstitutionalFootprintAlignment and ifaBullMappedStructureNow and
+     ifaBullQualityReady and ifaBullImbalanceLegAligned
+
+institutionalBearImbalanceQuality = enableInstitutionalFootprintAlignment and ifaBearMappedStructureNow and
+     ifaBearQualityReady and ifaBearImbalanceLegAligned
+
+institutionalImbalanceQuality = institutionalBullImbalanceQuality or institutionalBearImbalanceQuality
+
+int ifaBullOBBar = bullOBOK and not na(bullOBOffset) ? bar_index - bullOBOffset : na
+int ifaBearOBBar = bearOBOK and not na(bearOBOffset) ? bar_index - bearOBOffset : na
+
+ifaBullOBDirectionAligned = not ifaRequireOBLegAlignment or zigZagLegDirection == 1
+ifaBearOBDirectionAligned = not ifaRequireOBLegAlignment or zigZagLegDirection == -1
+
+ifaBullOBBarAligned = not ifaRequireOBLegAlignment or (
+     ifaZigZagLegReady and not na(ifaBullOBBar) and
+     ifaBullOBBar >= ifaZigZagLegLeftBar and
+     ifaBullOBBar <= ifaZigZagLegRightBar + ifaAlignmentMemoryBars
+)
+
+ifaBearOBBarAligned = not ifaRequireOBLegAlignment or (
+     ifaZigZagLegReady and not na(ifaBearOBBar) and
+     ifaBearOBBar >= ifaZigZagLegLeftBar and
+     ifaBearOBBar <= ifaZigZagLegRightBar + ifaAlignmentMemoryBars
+)
+
+ifaBullOBPriceAligned = not ifaRequireOBLegAlignment or (
+     ifaZigZagLegReady and bullOBOK and
+     bullOBTopCandidate <= ifaZigZagLegTop + atr * ifaOBLegToleranceATR and
+     bullOBBottomCandidate >= ifaZigZagLegBottom - atr * ifaOBLegToleranceATR
+)
+
+ifaBearOBPriceAligned = not ifaRequireOBLegAlignment or (
+     ifaZigZagLegReady and bearOBOK and
+     bearOBTopCandidate <= ifaZigZagLegTop + atr * ifaOBLegToleranceATR and
+     bearOBBottomCandidate >= ifaZigZagLegBottom - atr * ifaOBLegToleranceATR
+)
+
+ifaBullOBLegAligned = not ifaRequireOBLegAlignment or (
+     ifaZigZagLegReady and ifaBullOBDirectionAligned and ifaBullOBBarAligned and ifaBullOBPriceAligned
+)
+
+ifaBearOBLegAligned = not ifaRequireOBLegAlignment or (
+     ifaZigZagLegReady and ifaBearOBDirectionAligned and ifaBearOBBarAligned and ifaBearOBPriceAligned
+)
+
+institutionalBullOBQuality = enableInstitutionalFootprintAlignment and bullInstitutionalOB and
+     institutionalBullStructureQuality and ifaBullOBLegAligned
+
+institutionalBearOBQuality = enableInstitutionalFootprintAlignment and bearInstitutionalOB and
+     institutionalBearStructureQuality and ifaBearOBLegAligned
+
+institutionalOBQuality = institutionalBullOBQuality or institutionalBearOBQuality
+
+ifaBullImbalanceMissingText = not ifaBullMappedStructureNow ? "Need Bull Structure Map" :
+     not ifaBullZigZagGate ? "Need Bull ZZ Gate" :
+     not ifaBullDisplacementContext ? "Need Bull Displacement" :
+     not ifaBullImbalanceContext ? "Need Bull Imbalance" :
+     not ifaZigZagLegReady ? "Need Zig Zag Leg" :
+     not ifaBullImbalanceDirectionAligned ? "Need Bull Imbalance Direction" :
+     not ifaBullImbalanceBarAligned ? "Need Bull Imbalance Timing" :
+     not ifaBullImbalancePriceAligned ? "Need Bull Imbalance Price" : "Bull Imbalance Quality Ready"
+
+ifaBearImbalanceMissingText = not ifaBearMappedStructureNow ? "Need Bear Structure Map" :
+     not ifaBearZigZagGate ? "Need Bear ZZ Gate" :
+     not ifaBearDisplacementContext ? "Need Bear Displacement" :
+     not ifaBearImbalanceContext ? "Need Bear Imbalance" :
+     not ifaZigZagLegReady ? "Need Zig Zag Leg" :
+     not ifaBearImbalanceDirectionAligned ? "Need Bear Imbalance Direction" :
+     not ifaBearImbalanceBarAligned ? "Need Bear Imbalance Timing" :
+     not ifaBearImbalancePriceAligned ? "Need Bear Imbalance Price" : "Bear Imbalance Quality Ready"
+
+var int ifaLastImbalanceQualityBar = na
+var int ifaLastImbalanceQualityDirection = 0
+var string ifaLastImbalanceQualityText = "Waiting"
+var color ifaLastImbalanceQualityColor = neutralColor
+
+if institutionalBullImbalanceQuality
+    ifaLastImbalanceQualityBar := bar_index
+    ifaLastImbalanceQualityDirection := 1
+    ifaLastImbalanceQualityText := "Quality Bull Imbalance ✓"
+    ifaLastImbalanceQualityColor := bullColor
+else if institutionalBearImbalanceQuality
+    ifaLastImbalanceQualityBar := bar_index
+    ifaLastImbalanceQualityDirection := -1
+    ifaLastImbalanceQualityText := "Quality Bear Imbalance ✓"
+    ifaLastImbalanceQualityColor := bearColor
+else if enableInstitutionalFootprintAlignment and ifaBullMappedStructureNow
+    ifaLastImbalanceQualityBar := bar_index
+    ifaLastImbalanceQualityDirection := 1
+    ifaLastImbalanceQualityText := ifaBullImbalanceMissingText
+    ifaLastImbalanceQualityColor := liqColor
+else if enableInstitutionalFootprintAlignment and ifaBearMappedStructureNow
+    ifaLastImbalanceQualityBar := bar_index
+    ifaLastImbalanceQualityDirection := -1
+    ifaLastImbalanceQualityText := ifaBearImbalanceMissingText
+    ifaLastImbalanceQualityColor := liqColor
+
+ifaImbalanceQualityFresh = enableInstitutionalFootprintAlignment and not na(ifaLastImbalanceQualityBar) and
+     bar_index - ifaLastImbalanceQualityBar <= ifaImbalanceMemoryBars
+
+ifaImbalanceDashboardText = not enableInstitutionalFootprintAlignment ? "Off" :
+     ifaImbalanceQualityFresh ? ifaLastImbalanceQualityText :
+     orderFlow == 1 ? ifaBullImbalanceMissingText :
+     orderFlow == -1 ? ifaBearImbalanceMissingText :
+     "Waiting for imbalance"
+
+ifaImbalanceDashboardColor = not enableInstitutionalFootprintAlignment ? neutralColor :
+     ifaImbalanceQualityFresh ? ifaLastImbalanceQualityColor :
+     str.contains(ifaImbalanceDashboardText, "Bull Imbalance Quality") ? bullColor :
+     str.contains(ifaImbalanceDashboardText, "Bear Imbalance Quality") ? bearColor :
+     str.contains(ifaImbalanceDashboardText, "Quality") ? bullColor :
+     str.contains(ifaImbalanceDashboardText, "Need") ? liqColor : neutralColor
+
+ifaBullMissingText = not ifaBullZigZagGate ? "Need Bull ZZ Gate" :
+     not ifaBullLiquidityContext ? "Need SSL Sweep" :
+     not ifaBullDisplacementContext ? "Need Bull Displacement" :
+     not ifaBullImbalanceContext ? "Need Bull FVG" : "Bull Quality Ready"
+
+ifaBearMissingText = not ifaBearZigZagGate ? "Need Bear ZZ Gate" :
+     not ifaBearLiquidityContext ? "Need BSL Sweep" :
+     not ifaBearDisplacementContext ? "Need Bear Displacement" :
+     not ifaBearImbalanceContext ? "Need Bear FVG" : "Bear Quality Ready"
+
+var int ifaLastAlignmentBar = na
+var int ifaLastAlignmentDirection = 0
+var string ifaLastAlignmentText = "Waiting"
+var color ifaLastAlignmentColor = neutralColor
+
+if ifaBullStructureAlignedNow
+    ifaLastAlignmentBar := bar_index
+    ifaLastAlignmentDirection := 1
+    ifaLastAlignmentText := "Bull BOS/CHoCH aligned ✓"
+    ifaLastAlignmentColor := bullColor
+else if ifaBearStructureAlignedNow
+    ifaLastAlignmentBar := bar_index
+    ifaLastAlignmentDirection := -1
+    ifaLastAlignmentText := "Bear BOS/CHoCH aligned ✓"
+    ifaLastAlignmentColor := bearColor
+else if ifaBullStructureRejectedNow
+    ifaLastAlignmentBar := bar_index
+    ifaLastAlignmentDirection := 1
+    ifaLastAlignmentText := "Bull structure off Zig Zag"
+    ifaLastAlignmentColor := liqColor
+else if ifaBearStructureRejectedNow
+    ifaLastAlignmentBar := bar_index
+    ifaLastAlignmentDirection := -1
+    ifaLastAlignmentText := "Bear structure off Zig Zag"
+    ifaLastAlignmentColor := liqColor
+
+ifaAlignmentFresh = enableInstitutionalFootprintAlignment and not na(ifaLastAlignmentBar) and
+     bar_index - ifaLastAlignmentBar <= ifaAlignmentMemoryBars
+
+var int ifaLastQualityBar = na
+var int ifaLastQualityDirection = 0
+var string ifaLastQualityText = "Waiting"
+var color ifaLastQualityColor = neutralColor
+
+if institutionalBullBOSQuality
+    ifaLastQualityBar := bar_index
+    ifaLastQualityDirection := 1
+    ifaLastQualityText := "Quality Bull BOS ✓"
+    ifaLastQualityColor := bullColor
+else if institutionalBullCHoCHQuality
+    ifaLastQualityBar := bar_index
+    ifaLastQualityDirection := 1
+    ifaLastQualityText := "Quality Bull CHoCH ✓"
+    ifaLastQualityColor := bullColor
+else if institutionalBearBOSQuality
+    ifaLastQualityBar := bar_index
+    ifaLastQualityDirection := -1
+    ifaLastQualityText := "Quality Bear BOS ✓"
+    ifaLastQualityColor := bearColor
+else if institutionalBearCHoCHQuality
+    ifaLastQualityBar := bar_index
+    ifaLastQualityDirection := -1
+    ifaLastQualityText := "Quality Bear CHoCH ✓"
+    ifaLastQualityColor := bearColor
+else if enableInstitutionalFootprintAlignment and bullStructureEvent
+    ifaLastQualityBar := bar_index
+    ifaLastQualityDirection := 1
+    ifaLastQualityText := ifaBullMissingText
+    ifaLastQualityColor := liqColor
+else if enableInstitutionalFootprintAlignment and bearStructureEvent
+    ifaLastQualityBar := bar_index
+    ifaLastQualityDirection := -1
+    ifaLastQualityText := ifaBearMissingText
+    ifaLastQualityColor := liqColor
+
+ifaQualityFresh = enableInstitutionalFootprintAlignment and not na(ifaLastQualityBar) and
+     bar_index - ifaLastQualityBar <= ifaAlignmentMemoryBars
+
+ifaDashboardText = not enableInstitutionalFootprintAlignment ? "Off" :
+     not showZigZag ? "Need Zig Zag" :
+     ifaAlignmentFresh ? ifaLastAlignmentText :
+     zigZagTrendText == "Waiting" ? "Waiting for Zig Zag" :
+     "Gate: " + zigZagTrendText
+
+ifaDashboardColor = not enableInstitutionalFootprintAlignment ? neutralColor :
+     ifaAlignmentFresh ? ifaLastAlignmentColor :
+     zigZagBullStructure ? bullColor :
+     zigZagBearStructure ? bearColor :
+     zigZagTransitionStructure ? liqColor : neutralColor
+
+ifaQualityDashboardText = not enableInstitutionalFootprintAlignment ? "Off" :
+     ifaQualityFresh ? ifaLastQualityText :
+     orderFlow == 1 ? ifaBullMissingText :
+     orderFlow == -1 ? ifaBearMissingText :
+     "Waiting for structure"
+
+ifaQualityDashboardColor = not enableInstitutionalFootprintAlignment ? neutralColor :
+     ifaQualityFresh ? ifaLastQualityColor :
+     str.contains(ifaQualityDashboardText, "Bull Quality") ? bullColor :
+     str.contains(ifaQualityDashboardText, "Bear Quality") ? bearColor :
+     str.contains(ifaQualityDashboardText, "Quality") ? bullColor :
+     str.contains(ifaQualityDashboardText, "Need") ? liqColor : neutralColor
+
+ifaBullOBMissingText = not institutionalBullStructureQuality ? "Need Bull Structure Quality" :
+     not bullInstitutionalOB ? "Need Bull OB" :
+     not ifaZigZagLegReady ? "Need Zig Zag Leg" :
+     not ifaBullOBDirectionAligned ? "Need Bull OB Leg Direction" :
+     not ifaBullOBBarAligned ? "Need Bull OB Leg Timing" :
+     not ifaBullOBPriceAligned ? "Need Bull OB Leg Price" : "Bull OB Quality Ready"
+
+ifaBearOBMissingText = not institutionalBearStructureQuality ? "Need Bear Structure Quality" :
+     not bearInstitutionalOB ? "Need Bear OB" :
+     not ifaZigZagLegReady ? "Need Zig Zag Leg" :
+     not ifaBearOBDirectionAligned ? "Need Bear OB Leg Direction" :
+     not ifaBearOBBarAligned ? "Need Bear OB Leg Timing" :
+     not ifaBearOBPriceAligned ? "Need Bear OB Leg Price" : "Bear OB Quality Ready"
+
+ifaBullOBCandidateNow = bullStructureEvent and bullInstitutionalOB and bullFVGRequirement
+ifaBearOBCandidateNow = bearStructureEvent and bearInstitutionalOB and bearFVGRequirement
+
+var int ifaLastOBQualityBar = na
+var int ifaLastOBQualityDirection = 0
+var string ifaLastOBQualityText = "Waiting"
+var color ifaLastOBQualityColor = neutralColor
+
+if institutionalBullOBQuality
+    ifaLastOBQualityBar := bar_index
+    ifaLastOBQualityDirection := 1
+    ifaLastOBQualityText := "Quality Bull OB ✓"
+    ifaLastOBQualityColor := bullColor
+else if institutionalBearOBQuality
+    ifaLastOBQualityBar := bar_index
+    ifaLastOBQualityDirection := -1
+    ifaLastOBQualityText := "Quality Bear OB ✓"
+    ifaLastOBQualityColor := bearColor
+else if enableInstitutionalFootprintAlignment and ifaBullOBCandidateNow
+    ifaLastOBQualityBar := bar_index
+    ifaLastOBQualityDirection := 1
+    ifaLastOBQualityText := ifaBullOBMissingText
+    ifaLastOBQualityColor := liqColor
+else if enableInstitutionalFootprintAlignment and ifaBearOBCandidateNow
+    ifaLastOBQualityBar := bar_index
+    ifaLastOBQualityDirection := -1
+    ifaLastOBQualityText := ifaBearOBMissingText
+    ifaLastOBQualityColor := liqColor
+
+ifaOBQualityFresh = enableInstitutionalFootprintAlignment and not na(ifaLastOBQualityBar) and
+     bar_index - ifaLastOBQualityBar <= ifaAlignmentMemoryBars
+
+ifaOBQualityDashboardText = not enableInstitutionalFootprintAlignment ? "Off" :
+     ifaOBQualityFresh ? ifaLastOBQualityText :
+     orderFlow == 1 ? ifaBullOBMissingText :
+     orderFlow == -1 ? ifaBearOBMissingText :
+     "Waiting for OB"
+
+ifaOBQualityDashboardColor = not enableInstitutionalFootprintAlignment ? neutralColor :
+     ifaOBQualityFresh ? ifaLastOBQualityColor :
+     str.contains(ifaOBQualityDashboardText, "Bull OB Quality") ? bullColor :
+     str.contains(ifaOBQualityDashboardText, "Bear OB Quality") ? bearColor :
+     str.contains(ifaOBQualityDashboardText, "Quality") ? bullColor :
+     str.contains(ifaOBQualityDashboardText, "Need") ? liqColor : neutralColor
+
+// IFA PR7 — Judas Swing Detection.
+// A bullish Judas sweeps sell-side liquidity, keeps the protected low intact,
+// then reverses upward with displacement and an imbalance footprint.
+// A bearish Judas sweeps buy-side liquidity, keeps the protected high intact,
+// then reverses downward with displacement and an imbalance footprint.
+ifaBullJudasLiquidityContext = recentSSLSweep
+ifaBearJudasLiquidityContext = recentBSLSweep
+
+ifaBullJudasZigZagContext = not ifaRequireZigZagGateForJudas or ifaBullZigZagGate
+ifaBearJudasZigZagContext = not ifaRequireZigZagGateForJudas or ifaBearZigZagGate
+
+ifaBullJudasProtectedGuard = not ifaRequireProtectedGuardForJudas or (not sniperBullSetupInvalidated and not sniperBullProtectedLowSweptNow)
+ifaBearJudasProtectedGuard = not ifaRequireProtectedGuardForJudas or (not sniperBearSetupInvalidated and not sniperBearProtectedHighSweptNow)
+
+ifaBullJudasDisplacementContext = not ifaRequireDisplacementForJudas or bullDisplacement or recentBullDisplacement
+ifaBearJudasDisplacementContext = not ifaRequireDisplacementForJudas or bearDisplacement or recentBearDisplacement
+
+ifaBullJudasImbalanceContext = not ifaRequireImbalanceForJudas or (ifaBullImbalanceFresh and ifaBullImbalanceLegAligned)
+ifaBearJudasImbalanceContext = not ifaRequireImbalanceForJudas or (ifaBearImbalanceFresh and ifaBearImbalanceLegAligned)
+
+institutionalBullJudasSwing = enableInstitutionalFootprintAlignment and ifaBullJudasLiquidityContext and
+     ifaBullJudasZigZagContext and ifaBullJudasProtectedGuard and
+     ifaBullJudasDisplacementContext and ifaBullJudasImbalanceContext
+
+institutionalBearJudasSwing = enableInstitutionalFootprintAlignment and ifaBearJudasLiquidityContext and
+     ifaBearJudasZigZagContext and ifaBearJudasProtectedGuard and
+     ifaBearJudasDisplacementContext and ifaBearJudasImbalanceContext
+
+institutionalBullJudasSignal = institutionalBullJudasSwing and not (institutionalBullJudasSwing[1] == true)
+institutionalBearJudasSignal = institutionalBearJudasSwing and not (institutionalBearJudasSwing[1] == true)
+institutionalJudasSwing = institutionalBullJudasSwing or institutionalBearJudasSwing
+
+ifaBullJudasMissingText = not ifaBullJudasLiquidityContext ? "Need SSL Judas Sweep" :
+     not ifaBullJudasZigZagContext ? "Need Bull ZZ Gate" :
+     not ifaBullJudasProtectedGuard ? "Bull PL swept / reset" :
+     not ifaBullJudasDisplacementContext ? "Need Bull Reversal Disp" :
+     not ifaBullJudasImbalanceContext ? "Need Bull Imbalance" : "Bull Judas Ready"
+
+ifaBearJudasMissingText = not ifaBearJudasLiquidityContext ? "Need BSL Judas Sweep" :
+     not ifaBearJudasZigZagContext ? "Need Bear ZZ Gate" :
+     not ifaBearJudasProtectedGuard ? "Bear PH swept / reset" :
+     not ifaBearJudasDisplacementContext ? "Need Bear Reversal Disp" :
+     not ifaBearJudasImbalanceContext ? "Need Bear Imbalance" : "Bear Judas Ready"
+
+var int ifaLastJudasBar = na
+var int ifaLastJudasDirection = 0
+var string ifaLastJudasText = "Waiting"
+var color ifaLastJudasColor = neutralColor
+
+if institutionalBullJudasSignal
+    ifaLastJudasBar := bar_index
+    ifaLastJudasDirection := 1
+    ifaLastJudasText := "Bull Judas Swing ✓"
+    ifaLastJudasColor := bullColor
+else if institutionalBearJudasSignal
+    ifaLastJudasBar := bar_index
+    ifaLastJudasDirection := -1
+    ifaLastJudasText := "Bear Judas Swing ✓"
+    ifaLastJudasColor := bearColor
+else if enableInstitutionalFootprintAlignment and ifaBullJudasLiquidityContext and (orderFlow == 1 or ifaBullJudasZigZagContext)
+    ifaLastJudasBar := bar_index
+    ifaLastJudasDirection := 1
+    ifaLastJudasText := ifaBullJudasMissingText
+    ifaLastJudasColor := liqColor
+else if enableInstitutionalFootprintAlignment and ifaBearJudasLiquidityContext and (orderFlow == -1 or ifaBearJudasZigZagContext)
+    ifaLastJudasBar := bar_index
+    ifaLastJudasDirection := -1
+    ifaLastJudasText := ifaBearJudasMissingText
+    ifaLastJudasColor := liqColor
+
+ifaJudasFresh = enableInstitutionalFootprintAlignment and not na(ifaLastJudasBar) and
+     bar_index - ifaLastJudasBar <= ifaJudasMemoryBars
+
+ifaJudasDashboardText = not enableInstitutionalFootprintAlignment ? "Off" :
+     ifaJudasFresh ? ifaLastJudasText :
+     orderFlow == 1 ? ifaBullJudasMissingText :
+     orderFlow == -1 ? ifaBearJudasMissingText :
+     zigZagBullStructure or zigZagTransitionStructure ? ifaBullJudasMissingText :
+     zigZagBearStructure ? ifaBearJudasMissingText : "Waiting for Judas swing"
+
+ifaJudasDashboardColor = not enableInstitutionalFootprintAlignment ? neutralColor :
+     ifaJudasFresh ? ifaLastJudasColor :
+     str.contains(ifaJudasDashboardText, "Bull Judas") ? bullColor :
+     str.contains(ifaJudasDashboardText, "Bear Judas") ? bearColor :
+     str.contains(ifaJudasDashboardText, "Ready") ? bullColor :
+     str.contains(ifaJudasDashboardText, "swept") ? bearColor :
+     str.contains(ifaJudasDashboardText, "Need") ? liqColor : neutralColor
+
+// IFA PR8 — Institutional Footprint Summary.
+// One clean read that combines the major footprint layers into a simple
+// institutional context statement for the dashboard.
+ifaBullFootprintScore = (ifaBullZigZagGate ? 1 : 0) +
+     (institutionalBullStructureQuality ? 1 : 0) +
+     (institutionalBullImbalanceQuality ? 1 : 0) +
+     (institutionalBullOBQuality ? 1 : 0) +
+     (institutionalBullJudasSwing ? 1 : 0)
+
+ifaBearFootprintScore = (ifaBearZigZagGate ? 1 : 0) +
+     (institutionalBearStructureQuality ? 1 : 0) +
+     (institutionalBearImbalanceQuality ? 1 : 0) +
+     (institutionalBearOBQuality ? 1 : 0) +
+     (institutionalBearJudasSwing ? 1 : 0)
+
+ifaMaxFootprintScore = math.max(ifaBullFootprintScore, ifaBearFootprintScore)
+ifaBullFootprintPreferred = ifaBullFootprintScore > ifaBearFootprintScore or
+     (ifaBullFootprintScore == ifaBearFootprintScore and orderFlow == 1)
+ifaBearFootprintPreferred = ifaBearFootprintScore > ifaBullFootprintScore or
+     (ifaBullFootprintScore == ifaBearFootprintScore and orderFlow == -1)
+
+ifaBullFootprintStrong = enableInstitutionalFootprintAlignment and ifaBullFootprintScore >= 4 and ifaBullFootprintPreferred
+ifaBearFootprintStrong = enableInstitutionalFootprintAlignment and ifaBearFootprintScore >= 4 and ifaBearFootprintPreferred
+ifaBullFootprintBuilding = enableInstitutionalFootprintAlignment and not ifaBullFootprintStrong and ifaBullFootprintScore >= 3 and ifaBullFootprintPreferred
+ifaBearFootprintBuilding = enableInstitutionalFootprintAlignment and not ifaBearFootprintStrong and ifaBearFootprintScore >= 3 and ifaBearFootprintPreferred
+institutionalFootprintStrong = ifaBullFootprintStrong or ifaBearFootprintStrong
+institutionalFootprintBuilding = ifaBullFootprintBuilding or ifaBearFootprintBuilding
+
+ifaFootprintSummaryText = not enableInstitutionalFootprintAlignment ? "Off" :
+     ifaBullFootprintStrong ? "Bull Footprint Strong " + str.tostring(ifaBullFootprintScore) + "/5" :
+     ifaBearFootprintStrong ? "Bear Footprint Strong " + str.tostring(ifaBearFootprintScore) + "/5" :
+     ifaBullFootprintBuilding ? "Bull Footprint Building " + str.tostring(ifaBullFootprintScore) + "/5" :
+     ifaBearFootprintBuilding ? "Bear Footprint Building " + str.tostring(ifaBearFootprintScore) + "/5" :
+     ifaMaxFootprintScore > 0 ? "Footprint Incomplete B" + str.tostring(ifaBullFootprintScore) + " / S" + str.tostring(ifaBearFootprintScore) :
+     "No Institutional Footprint"
+
+ifaFootprintSummaryColor = not enableInstitutionalFootprintAlignment ? neutralColor :
+     ifaBullFootprintStrong or ifaBullFootprintBuilding ? bullColor :
+     ifaBearFootprintStrong or ifaBearFootprintBuilding ? bearColor :
+     ifaMaxFootprintScore > 0 ? liqColor : neutralColor
+
+// IFA PR9 / PR10 / PR11 / PR12 / PR13 / PR14 — Institutional Footprint Permission Gate.
+// Permission requires the full IFA stack to be aligned and the protected guard to remain intact.
+// PR10 adds non-repeating alerts when bullish or bearish permission first becomes active.
+// PR11 optionally lets this permission layer gate BUY / SELL decisions when enabled.
+// PR12 audits whether that gate is off, passed, blocking, or waiting for active decision pressure.
+// PR13 adds a plain-language test note for passed, blocked, and normal Decision Engine behavior.
+// PR14 review confirms permission, alert, and audit states are preserved without adding new logic.
+ifaBullStructureQualityFresh = ifaQualityFresh and ifaLastQualityDirection == 1 and str.contains(ifaLastQualityText, "Quality Bull")
+ifaBearStructureQualityFresh = ifaQualityFresh and ifaLastQualityDirection == -1 and str.contains(ifaLastQualityText, "Quality Bear")
+
+ifaBullImbalanceQualityFresh = ifaImbalanceQualityFresh and ifaLastImbalanceQualityDirection == 1 and str.contains(ifaLastImbalanceQualityText, "Quality Bull")
+ifaBearImbalanceQualityFresh = ifaImbalanceQualityFresh and ifaLastImbalanceQualityDirection == -1 and str.contains(ifaLastImbalanceQualityText, "Quality Bear")
+
+ifaBullOBQualityFresh = ifaOBQualityFresh and ifaLastOBQualityDirection == 1 and str.contains(ifaLastOBQualityText, "Quality Bull")
+ifaBearOBQualityFresh = ifaOBQualityFresh and ifaLastOBQualityDirection == -1 and str.contains(ifaLastOBQualityText, "Quality Bear")
+
+ifaBullJudasPermissionOK = not ifaRequireJudasForPermission or (ifaJudasFresh and ifaLastJudasDirection == 1 and str.contains(ifaLastJudasText, "Bull Judas"))
+ifaBearJudasPermissionOK = not ifaRequireJudasForPermission or (ifaJudasFresh and ifaLastJudasDirection == -1 and str.contains(ifaLastJudasText, "Bear Judas"))
+
+ifaBullPermissionProtectedGuard = not sniperBullSetupInvalidated and not sniperBullProtectedLowSweptNow
+ifaBearPermissionProtectedGuard = not sniperBearSetupInvalidated and not sniperBearProtectedHighSweptNow
+
+ifaBullPermissionStackReady = ifaBullZigZagGate and ifaBullStructureQualityFresh and ifaBullImbalanceQualityFresh and ifaBullOBQualityFresh
+ifaBearPermissionStackReady = ifaBearZigZagGate and ifaBearStructureQualityFresh and ifaBearImbalanceQualityFresh and ifaBearOBQualityFresh
+
+institutionalBullFootprintPermission = enableInstitutionalFootprintAlignment and ifaBullPermissionStackReady and
+     ifaBullJudasPermissionOK and ifaBullPermissionProtectedGuard
+
+institutionalBearFootprintPermission = enableInstitutionalFootprintAlignment and ifaBearPermissionStackReady and
+     ifaBearJudasPermissionOK and ifaBearPermissionProtectedGuard
+
+institutionalFootprintPermission = institutionalBullFootprintPermission or institutionalBearFootprintPermission
+institutionalFootprintPermissionDirection = institutionalBullFootprintPermission ? 1 : institutionalBearFootprintPermission ? -1 : 0
+
+// IFA PR10 alert signals.
+// These fire only on the first candle permission becomes active.
+institutionalBullFootprintPermissionSignal = institutionalBullFootprintPermission and not (institutionalBullFootprintPermission[1] == true)
+institutionalBearFootprintPermissionSignal = institutionalBearFootprintPermission and not (institutionalBearFootprintPermission[1] == true)
+
+ifaBullPermissionMissingText = not ifaBullZigZagGate ? "Need Bull ZZ Gate" :
+     not ifaBullStructureQualityFresh ? "Need Bull Structure Quality" :
+     not ifaBullImbalanceQualityFresh ? "Need Bull Imbalance Quality" :
+     not ifaBullOBQualityFresh ? "Need Bull OB Quality" :
+     not ifaBullJudasPermissionOK ? "Need Bull Judas" :
+     not ifaBullPermissionProtectedGuard ? "Bull PL swept / reset" : "Bull Permission Ready"
+
+ifaBearPermissionMissingText = not ifaBearZigZagGate ? "Need Bear ZZ Gate" :
+     not ifaBearStructureQualityFresh ? "Need Bear Structure Quality" :
+     not ifaBearImbalanceQualityFresh ? "Need Bear Imbalance Quality" :
+     not ifaBearOBQualityFresh ? "Need Bear OB Quality" :
+     not ifaBearJudasPermissionOK ? "Need Bear Judas" :
+     not ifaBearPermissionProtectedGuard ? "Bear PH swept / reset" : "Bear Permission Ready"
+
+ifaPermissionDashboardText = not enableInstitutionalFootprintAlignment ? "Off" :
+     institutionalBullFootprintPermission ? "Bull Permission ✓" :
+     institutionalBearFootprintPermission ? "Bear Permission ✓" :
+     orderFlow == 1 ? ifaBullPermissionMissingText :
+     orderFlow == -1 ? ifaBearPermissionMissingText :
+     ifaMaxFootprintScore > 0 ? "No Trade — Footprint Incomplete" : "No Trade — No Footprint"
+
+ifaPermissionDashboardColor = not enableInstitutionalFootprintAlignment ? neutralColor :
+     institutionalBullFootprintPermission ? bullColor :
+     institutionalBearFootprintPermission ? bearColor :
+     str.contains(ifaPermissionDashboardText, "Bull") and not str.contains(ifaPermissionDashboardText, "Need") ? bullColor :
+     str.contains(ifaPermissionDashboardText, "Bear") and not str.contains(ifaPermissionDashboardText, "Need") ? bearColor :
+     str.contains(ifaPermissionDashboardText, "swept") ? bearColor :
+     str.contains(ifaPermissionDashboardText, "Need") ? liqColor : neutralColor
 
 //=============================================================================
 // 12. HIGHLIGHTED ORDER-BLOCK / FVG ZONES
@@ -661,21 +2244,21 @@ var bool fvgActive = false
 var int activeZoneCreatedBar = na
 
 addOBZone(bool bullish, int leftBar, float zoneTop, float zoneBottom) =>
-    string directionText = bullish ? "Bullish OB" : "Bearish OB"
     string priceText = str.tostring(zoneTop, format.mintick) + " - " + str.tostring(zoneBottom, format.mintick)
     string fullDirectionText = bullish ? "Bullish Order Block" : "Bearish Order Block"
-    string zoneTextLabel = showOBPriceText ? "NEWEST  •  " + fullDirectionText + "\n" + priceText : fullDirectionText
+    string shortDirectionText = bullish ? "Bullish OB" : "Bearish OB"
+    string zoneTextLabel = obLabelModeFull and showOBPriceText ? "NEWEST  •  " + fullDirectionText + "\n" + priceText : obLabelModeShort ? shortDirectionText : ""
     color zoneColor = bullish ? bullColor : bearColor
     box newZone = box.new(
          leftBar, zoneTop, bar_index, zoneBottom,
          xloc = xloc.bar_index,
          extend = extend.right,
-         border_color = zoneColor,
+         border_color = color.new(zoneColor, 0),
          border_width = obBorderWidth,
          bgcolor = color.new(zoneColor, obZoneOpacity),
          text = zoneTextLabel,
          text_color = color.white,
-         text_size = size.small,
+         text_size = obLabelModeFull ? size.tiny : size.tiny,
          text_halign = text.align_center,
          text_valign = text.align_center
      )
@@ -683,6 +2266,14 @@ addOBZone(bool bullish, int leftBar, float zoneTop, float zoneBottom) =>
     if array.size(obBoxes) > maxOBZones
         box.delete(array.shift(obBoxes))
     newZone
+
+obMitigatedText(bool bullish) =>
+    obLabelModeFull ? (bullish ? "Bullish OB  MITIGATED" : "Bearish OB  MITIGATED") : obLabelModeShort ? "OB MIT" : ""
+
+fvgZoneText(bool bullish, float zoneTop, float zoneBottom) =>
+    string priceText = str.tostring(zoneTop, format.mintick) + " - " + str.tostring(zoneBottom, format.mintick)
+    string directionText = bullish ? "Bullish FVG" : "Bearish FVG"
+    fvgLabelModeFull ? directionText + "\n" + priceText : fvgLabelModeShort ? "FVG" : ""
 
 // Draw the zone as soon as structure + displacement validate the OB.
 // Full qualification remains responsible for arrows and trade plans.
@@ -709,7 +2300,7 @@ if bullOBZoneSignal
              xloc = xloc.bar_index, extend = extend.right,
              border_color = color.new(bullColor, 5), border_width = 1, border_style = line.style_dashed,
              bgcolor = color.new(bullColor, 90),
-             text = "Bullish FVG  " + str.tostring(activeFVGTop, format.mintick) + " - " + str.tostring(activeFVGBottom, format.mintick),
+             text = fvgZoneText(true, activeFVGTop, activeFVGBottom),
              text_color = color.white, text_size = size.tiny,
              text_halign = text.align_center, text_valign = text.align_center
          )
@@ -734,7 +2325,7 @@ if bearOBZoneSignal
              xloc = xloc.bar_index, extend = extend.right,
              border_color = color.new(bearColor, 5), border_width = 1, border_style = line.style_dashed,
              bgcolor = color.new(bearColor, 90),
-             text = "Bearish FVG  " + str.tostring(activeFVGTop, format.mintick) + " - " + str.tostring(activeFVGBottom, format.mintick),
+             text = fvgZoneText(false, activeFVGTop, activeFVGBottom),
              text_color = color.white, text_size = size.tiny,
              text_halign = text.align_center, text_valign = text.align_center
          )
@@ -765,7 +2356,7 @@ if obMitigated
             box.set_extend(activeOB, extend.none)
             box.set_right(activeOB, bar_index)
             box.set_bgcolor(activeOB, color.new(activeBullish ? bullColor : bearColor, 92))
-            box.set_text(activeOB, (activeBullish ? "Bullish OB" : "Bearish OB") + "  MITIGATED")
+            box.set_text(activeOB, obMitigatedText(activeBullish))
 
 if fvgFilled
     fvgActive := false
@@ -776,6 +2367,815 @@ if fvgFilled
         box.set_extend(activeFVG, extend.none)
         box.set_right(activeFVG, bar_index)
         box.set_bgcolor(activeFVG, color.new(fvgColor, 93))
+
+//=============================================================================
+// 12A. INSTITUTIONAL LIQUIDITY LABEL FILTER — PR4
+// Only prints BSL / SSL labels when a matching validated OB footprint appears.
+// Raw liquidity sweeps are still tracked internally for scoring and decisions.
+//=============================================================================
+liquidityLevelNearActiveOB(float level) =>
+    not na(level) and not na(activeOBTop) and not na(activeOBBottom) and
+     level <= activeOBTop + atr * liquidityLabelOBProximityATR and
+     level >= activeOBBottom - atr * liquidityLabelOBProximityATR
+
+sslHasOBContext = bullOBZoneSignal and recentSSLSweep and (not liquidityLabelsRequireOBContext or liquidityLevelNearActiveOB(lastSSLSweepLevel))
+bslHasOBContext = bearOBZoneSignal and recentBSLSweep and (not liquidityLabelsRequireOBContext or liquidityLevelNearActiveOB(lastBSLSweepLevel))
+
+sslInstitutionalMarkOldEnough = na(lastSSLMarkBar) or bar_index - lastSSLMarkBar > liquidityLabelCooldownBars
+sslInstitutionalMarkFarEnough = na(lastSSLMarkLevel) or math.abs(lastSSLSweepLevel - lastSSLMarkLevel) > atr * liquidityLabelPriceSpacingATR
+sslInstitutionalMarkAllowed = sslInstitutionalMarkOldEnough or sslInstitutionalMarkFarEnough
+
+bslInstitutionalMarkOldEnough = na(lastBSLMarkBar) or bar_index - lastBSLMarkBar > liquidityLabelCooldownBars
+bslInstitutionalMarkFarEnough = na(lastBSLMarkLevel) or math.abs(lastBSLSweepLevel - lastBSLMarkLevel) > atr * liquidityLabelPriceSpacingATR
+bslInstitutionalMarkAllowed = bslInstitutionalMarkOldEnough or bslInstitutionalMarkFarEnough
+
+if sslHasOBContext and sslInstitutionalMarkAllowed
+    addLiquidityMark(labelSSLTaken, lastSSLSweepLevel, bullColor)
+    lastSSLMarkBar := bar_index
+    lastSSLMarkLevel := lastSSLSweepLevel
+
+if bslHasOBContext and bslInstitutionalMarkAllowed
+    addLiquidityMark(labelBSLTaken, lastBSLSweepLevel, bearColor)
+    lastBSLMarkBar := bar_index
+    lastBSLMarkLevel := lastBSLSweepLevel
+
+plotshape(showSweepMarks and not showLiquidityLines and sslHasOBContext and sslInstitutionalMarkAllowed, "Sell-side institutional liquidity mark", shape.xcross, location.belowbar, liqColor, size = size.tiny, text = "SSL")
+plotshape(showSweepMarks and not showLiquidityLines and bslHasOBContext and bslInstitutionalMarkAllowed, "Buy-side institutional liquidity mark", shape.xcross, location.abovebar, liqColor, size = size.tiny, text = "BSL")
+
+//=============================================================================
+// 13. DECISION ENGINE 2.0 — PR3
+// One source of truth for dashboard, trade plan, setup markers, and alerts.
+//=============================================================================
+extRangeValidDecision = not na(lastExtHigh) and not na(lastExtLow) and lastExtHigh > lastExtLow
+decisionRange = extRangeValidDecision ? lastExtHigh - lastExtLow : na
+
+// Directional OTE zones. Bullish OTE is measured high-to-low; bearish OTE low-to-high.
+bullOTEUpper = extRangeValidDecision ? lastExtHigh - decisionRange * 0.618 : na
+bullOTELower = extRangeValidDecision ? lastExtHigh - decisionRange * 0.79 : na
+bearOTELower = extRangeValidDecision ? lastExtLow + decisionRange * 0.618 : na
+bearOTEUpper = extRangeValidDecision ? lastExtLow + decisionRange * 0.79 : na
+
+bullOTEState = extRangeValidDecision and close <= bullOTEUpper and close >= bullOTELower
+bearOTEState = extRangeValidDecision and close >= bearOTELower and close <= bearOTEUpper
+
+// Shared engine states consumed by the Decision Engine.
+bullLiquidityState = recentSSLSweep
+bearLiquidityState = recentBSLSweep
+bullDisplacementState = recentBullDisplacement
+bearDisplacementState = recentBearDisplacement
+bullStructureState = orderFlow == 1 and str.contains(latestStructureEvent, "Bullish")
+bearStructureState = orderFlow == -1 and str.contains(latestStructureEvent, "Bearish")
+bullOBState = obActive and activeBullish
+bearOBState = obActive and not activeBullish
+bullFVGState = fvgActive and activeBullish
+bearFVGState = fvgActive and not activeBullish
+bullHTFState = bullBias
+bearHTFState = bearBias
+
+// Decision Engine 2.0 default weights: liquidity 20, displacement 20,
+// structure 20, fresh OB 15, active FVG 10, OTE 10, HTF 5.
+decisionBullScore = (bullLiquidityState ? 20 : 0) +
+     (bullDisplacementState ? 20 : 0) +
+     (bullStructureState ? 20 : 0) +
+     (bullOBState ? 15 : 0) +
+     (bullFVGState ? 10 : 0) +
+     (bullOTEState ? 10 : 0) +
+     (bullHTFState ? 5 : 0)
+
+decisionBearScore = (bearLiquidityState ? 20 : 0) +
+     (bearDisplacementState ? 20 : 0) +
+     (bearStructureState ? 20 : 0) +
+     (bearOBState ? 15 : 0) +
+     (bearFVGState ? 10 : 0) +
+     (bearOTEState ? 10 : 0) +
+     (bearHTFState ? 5 : 0)
+
+liquidityGateEnabled = requireSweepBeforeBOS or requireSweepBeforeMSS
+
+// IFA PR11 / PR12 / PR13 / PR14 optional Decision Engine permission gate.
+// PR11 keeps default BUY / SELL behavior unchanged while Require IFA Permission for BUY / SELL is off.
+// PR12 adds an audit layer that shows whether the gate is off, passed, blocking, or waiting for pressure.
+// PR13 clarifies test-mode wording when normal Decision Engine conditions are ready but IFA is blocking.
+// PR14 preserves default Decision Engine behavior and keeps the optional IFA gate off by default.
+bullMandatoryCoreReady = bullStructureState and bullDisplacementState and bullOBState and
+     (not liquidityGateEnabled or bullLiquidityState) and
+     (not requireFVGForSetup or bullFVGState) and
+     (not requireOTEForDecision or bullOTEState) and
+     (not requireHTFForDecision or bullHTFState)
+
+bearMandatoryCoreReady = bearStructureState and bearDisplacementState and bearOBState and
+     (not liquidityGateEnabled or bearLiquidityState) and
+     (not requireFVGForSetup or bearFVGState) and
+     (not requireOTEForDecision or bearOTEState) and
+     (not requireHTFForDecision or bearHTFState)
+
+bullIFADecisionGate = not requireIFAPermissionForDecision or institutionalBullFootprintPermission
+bearIFADecisionGate = not requireIFAPermissionForDecision or institutionalBearFootprintPermission
+
+bullMandatoryReady = bullMandatoryCoreReady and bullIFADecisionGate
+bearMandatoryReady = bearMandatoryCoreReady and bearIFADecisionGate
+
+scoreSeparation = math.abs(decisionBullScore - decisionBearScore)
+bothScoresHigh = decisionBullScore >= minimumScore and decisionBearScore >= minimumScore
+structureOBConflict = (bullStructureState and bearOBState) or (bearStructureState and bullOBState)
+strictHTFConflict = requireHTFForDecision and ((bullStructureState and bearHTFState) or (bearStructureState and bullHTFState))
+closeEvidenceConflict = decisionBullScore >= 40 and decisionBearScore >= 40 and scoreSeparation < minimumScoreSeparation
+decisionConflict = bothScoresHigh or closeEvidenceConflict or structureOBConflict or strictHTFConflict
+
+ifaBullDecisionPressure = requireIFAPermissionForDecision and bullMandatoryCoreReady and
+     decisionBullScore >= minimumScore and decisionBullScore > decisionBearScore and
+     scoreSeparation >= minimumScoreSeparation and not decisionConflict
+
+ifaBearDecisionPressure = requireIFAPermissionForDecision and bearMandatoryCoreReady and
+     decisionBearScore >= minimumScore and decisionBearScore > decisionBullScore and
+     scoreSeparation >= minimumScoreSeparation and not decisionConflict
+
+ifaBullDecisionBlocked = ifaBullDecisionPressure and not institutionalBullFootprintPermission
+ifaBearDecisionBlocked = ifaBearDecisionPressure and not institutionalBearFootprintPermission
+ifaBullDecisionGatePassed = ifaBullDecisionPressure and institutionalBullFootprintPermission
+ifaBearDecisionGatePassed = ifaBearDecisionPressure and institutionalBearFootprintPermission
+
+ifaDecisionGateAuditText = not requireIFAPermissionForDecision ? "IFA Gate OFF — Normal Engine" :
+     ifaBullDecisionGatePassed ? "Bull IFA Passed — BUY Allowed" :
+     ifaBearDecisionGatePassed ? "Bear IFA Passed — SELL Allowed" :
+     ifaBullDecisionBlocked ? "Core BUY Ready — IFA Blocking" :
+     ifaBearDecisionBlocked ? "Core SELL Ready — IFA Blocking" :
+     "IFA Gate ON — Waiting for Setup"
+
+ifaDecisionGateAuditColor = not requireIFAPermissionForDecision ? neutralColor :
+     ifaBullDecisionGatePassed ? bullColor :
+     ifaBearDecisionGatePassed ? bearColor :
+     ifaBullDecisionBlocked or ifaBearDecisionBlocked ? liqColor : neutralColor
+
+ifaDecisionGateTestNoteText = not requireIFAPermissionForDecision ? "Normal BUY / SELL engine active" :
+     ifaBullDecisionGatePassed ? "Core BUY + Bull IFA agree" :
+     ifaBearDecisionGatePassed ? "Core SELL + Bear IFA agree" :
+     ifaBullDecisionBlocked ? "Core BUY ready; waiting for Bull IFA" :
+     ifaBearDecisionBlocked ? "Core SELL ready; waiting for Bear IFA" :
+     "IFA gate ON; no core setup ready"
+
+ifaDecisionGateTestNoteColor = not requireIFAPermissionForDecision ? neutralColor :
+     ifaBullDecisionGatePassed ? bullColor :
+     ifaBearDecisionGatePassed ? bearColor :
+     ifaBullDecisionBlocked or ifaBearDecisionBlocked ? liqColor : neutralColor
+
+decisionLongReady = bullMandatoryReady and decisionBullScore >= minimumScore and
+     decisionBullScore > decisionBearScore and scoreSeparation >= minimumScoreSeparation and not decisionConflict
+decisionShortReady = bearMandatoryReady and decisionBearScore >= minimumScore and
+     decisionBearScore > decisionBullScore and scoreSeparation >= minimumScoreSeparation and not decisionConflict
+
+// Select the side that owns current structure; otherwise use the stronger evidence score.
+decisionDirection = orderFlow == 1 ? 1 : orderFlow == -1 ? -1 : decisionBullScore > decisionBearScore ? 1 : decisionBearScore > decisionBullScore ? -1 : 0
+decisionScore = decisionLongReady ? decisionBullScore : decisionShortReady ? decisionBearScore :
+     decisionDirection == 1 ? decisionBullScore : decisionDirection == -1 ? decisionBearScore : math.max(decisionBullScore, decisionBearScore)
+
+gradeFromDecisionScore(int score) =>
+    score >= 95 ? "A+" : score >= 90 ? "A" : score >= 85 ? "B+" : score >= 80 ? "B" : score >= 70 ? "C" : "PASS"
+
+decisionGrade = gradeFromDecisionScore(decisionScore)
+
+string decisionRecommendation = "WAIT"
+string decisionMissing = "No valid directional sequence"
+string decisionStage = "LIQUIDITY"
+
+if decisionConflict
+    decisionRecommendation := "NO TRADE — CONFLICT"
+    decisionMissing := structureOBConflict ? "Structure conflicts with the active order block" : strictHTFConflict ? "Higher-timeframe bias conflicts with structure" : bothScoresHigh ? "Bullish and bearish setups both score above the threshold" : "Bullish and bearish evidence is too close"
+    decisionStage := "CONFLICT"
+else if decisionLongReady
+    decisionRecommendation := "BUY"
+    decisionMissing := "All required conditions confirmed"
+    decisionStage := "ENTRY READY"
+else if decisionShortReady
+    decisionRecommendation := "SELL"
+    decisionMissing := "All required conditions confirmed"
+    decisionStage := "ENTRY READY"
+else if decisionDirection == 1
+    decisionRecommendation := liquidityGateEnabled and not bullLiquidityState ? "WAIT FOR LIQUIDITY" :
+         not bullDisplacementState ? "WAIT FOR DISPLACEMENT" :
+         not bullStructureState ? "WAIT FOR STRUCTURE" :
+         not bullOBState ? "WAIT FOR ORDER BLOCK" :
+         requireFVGForSetup and not bullFVGState ? "WAIT FOR FVG" :
+         requireOTEForDecision and not bullOTEState ? "WAIT FOR OTE" :
+         requireHTFForDecision and not bullHTFState ? "WAIT FOR HTF" :
+         ifaBullDecisionBlocked ? "WAIT — IFA BLOCKING" : "PREPARING"
+    decisionMissing := liquidityGateEnabled and not bullLiquidityState ? "Sell-side liquidity sweep" :
+         not bullDisplacementState ? "Bullish displacement" :
+         not bullStructureState ? "Bullish BOS / CHoCH" :
+         not bullOBState ? "Fresh bullish order block" :
+         requireFVGForSetup and not bullFVGState ? "Active bullish FVG" :
+         requireOTEForDecision and not bullOTEState ? "Bullish OTE retracement" :
+         requireHTFForDecision and not bullHTFState ? "Bullish HTF alignment" :
+         ifaBullDecisionBlocked ? "Core BUY ready; missing Bull IFA permission" : "Score / separation threshold"
+    decisionStage := liquidityGateEnabled and not bullLiquidityState ? "LIQUIDITY" :
+         not bullDisplacementState ? "DISPLACEMENT" :
+         not bullStructureState ? "STRUCTURE" :
+         not bullOBState ? "ORDER BLOCK" :
+         requireFVGForSetup and not bullFVGState ? "FVG" :
+         requireOTEForDecision and not bullOTEState ? "OTE" :
+         ifaBullDecisionBlocked ? "IFA" : "ENTRY"
+else if decisionDirection == -1
+    decisionRecommendation := liquidityGateEnabled and not bearLiquidityState ? "WAIT FOR LIQUIDITY" :
+         not bearDisplacementState ? "WAIT FOR DISPLACEMENT" :
+         not bearStructureState ? "WAIT FOR STRUCTURE" :
+         not bearOBState ? "WAIT FOR ORDER BLOCK" :
+         requireFVGForSetup and not bearFVGState ? "WAIT FOR FVG" :
+         requireOTEForDecision and not bearOTEState ? "WAIT FOR OTE" :
+         requireHTFForDecision and not bearHTFState ? "WAIT FOR HTF" :
+         ifaBearDecisionBlocked ? "WAIT — IFA BLOCKING" : "PREPARING"
+    decisionMissing := liquidityGateEnabled and not bearLiquidityState ? "Buy-side liquidity sweep" :
+         not bearDisplacementState ? "Bearish displacement" :
+         not bearStructureState ? "Bearish BOS / CHoCH" :
+         not bearOBState ? "Fresh bearish order block" :
+         requireFVGForSetup and not bearFVGState ? "Active bearish FVG" :
+         requireOTEForDecision and not bearOTEState ? "Bearish OTE retracement" :
+         requireHTFForDecision and not bearHTFState ? "Bearish HTF alignment" :
+         ifaBearDecisionBlocked ? "Core SELL ready; missing Bear IFA permission" : "Score / separation threshold"
+    decisionStage := liquidityGateEnabled and not bearLiquidityState ? "LIQUIDITY" :
+         not bearDisplacementState ? "DISPLACEMENT" :
+         not bearStructureState ? "STRUCTURE" :
+         not bearOBState ? "ORDER BLOCK" :
+         requireFVGForSetup and not bearFVGState ? "FVG" :
+         requireOTEForDecision and not bearOTEState ? "OTE" :
+         ifaBearDecisionBlocked ? "IFA" : "ENTRY"
+
+decisionLongSignal = decisionLongReady and not decisionLongReady[1]
+decisionShortSignal = decisionShortReady and not decisionShortReady[1]
+
+// Plain-language outputs used by the dashboard and future alerts.
+decisionBiasText = decisionDirection == 1 ? "Bullish" : decisionDirection == -1 ? "Bearish" : "Neutral"
+decisionNextStep = decisionLongReady ? "Execute only under your trade plan" :
+     decisionShortReady ? "Execute only under your trade plan" :
+     decisionConflict ? "Wait until directional evidence agrees" :
+     decisionDirection == 1 and liquidityGateEnabled and not bullLiquidityState ? "Wait for an SSL sweep" :
+     decisionDirection == -1 and liquidityGateEnabled and not bearLiquidityState ? "Wait for a BSL sweep" :
+     decisionDirection == 1 and not bullDisplacementState ? "Wait for bullish displacement" :
+     decisionDirection == -1 and not bearDisplacementState ? "Wait for bearish displacement" :
+     decisionDirection == 1 and not bullStructureState ? "Wait for bullish BOS / CHoCH" :
+     decisionDirection == -1 and not bearStructureState ? "Wait for bearish BOS / CHoCH" :
+     decisionDirection == 1 and not bullOBState ? "Wait for a fresh bullish order block" :
+     decisionDirection == -1 and not bearOBState ? "Wait for a fresh bearish order block" :
+     decisionDirection == 1 and requireFVGForSetup and not bullFVGState ? "Wait for an active bullish FVG" :
+     decisionDirection == -1 and requireFVGForSetup and not bearFVGState ? "Wait for an active bearish FVG" :
+     decisionDirection == 1 and requireOTEForDecision and not bullOTEState ? "Wait for bullish OTE retracement" :
+     decisionDirection == -1 and requireOTEForDecision and not bearOTEState ? "Wait for bearish OTE retracement" :
+     decisionDirection == 1 and requireHTFForDecision and not bullHTFState ? "Wait for bullish HTF alignment" :
+     decisionDirection == -1 and requireHTFForDecision and not bearHTFState ? "Wait for bearish HTF alignment" :
+     decisionDirection == 1 and ifaBullDecisionBlocked ? "Core BUY ready; wait for bullish IFA" :
+     decisionDirection == -1 and ifaBearDecisionBlocked ? "Core SELL ready; wait for bearish IFA" : "Wait for stronger confirmation"
+
+decisionStory = decisionConflict ? decisionMissing :
+     decisionLongReady ? "Bullish setup is fully confirmed" :
+     decisionShortReady ? "Bearish setup is fully confirmed" :
+     decisionDirection == 1 ? "Bullish evidence is developing" :
+     decisionDirection == -1 ? "Bearish evidence is developing" : "No directional setup owns the market"
+
+//=============================================================================
+// 13A. MARKET NARRATIVE ENGINE — PR7
+// PR7 adds dashboard focus modes without changing BUY / SELL logic.
+// PR5 improves dashboard briefing readability without changing BUY / SELL logic.
+//=============================================================================
+narrativeTrending = math.abs(ema20 - ema50) > atr * 0.25
+
+narrativeBullLiquidityRaid = bullLiquidityState and decisionDirection == 1
+narrativeBearLiquidityRaid = bearLiquidityState and decisionDirection == -1
+
+narrativeBullRetracement = decisionDirection == 1 and obActive and activeBullish
+narrativeBearRetracement = decisionDirection == -1 and obActive and not activeBullish
+
+narrativeBullExpansion = decisionDirection == 1 and (bullDisplacementState or bullStructureState)
+narrativeBearExpansion = decisionDirection == -1 and (bearDisplacementState or bearStructureState)
+
+marketDirectionText = decisionLongReady ? "Bullish" :
+     decisionShortReady ? "Bearish" :
+     bullBias ? "Bullish" :
+     bearBias ? "Bearish" :
+     decisionDirection == 1 ? "Bullish Lean" :
+     decisionDirection == -1 ? "Bearish Lean" : "Mixed"
+
+marketDirectionColor = str.contains(marketDirectionText, "Bullish") ? bullColor :
+     str.contains(marketDirectionText, "Bearish") ? bearColor : neutralColor
+
+marketPhaseText = decisionLongReady or decisionShortReady ? "Execution Ready" :
+     decisionConflict ? "Conflict" :
+     narrativeBullLiquidityRaid or narrativeBearLiquidityRaid ? "Liquidity Raid" :
+     narrativeBullRetracement or narrativeBearRetracement ? "Retracement" :
+     narrativeBullExpansion or narrativeBearExpansion ? "Expansion" :
+     narrativeTrending ? "Trending" : "Consolidation"
+
+institutionalNarrativeText = decisionLongReady ? "Bullish Execution Setup" :
+     decisionShortReady ? "Bearish Execution Setup" :
+     decisionConflict ? "Conflict / Stand Down" :
+     narrativeBullLiquidityRaid ? "Sell-Side Liquidity Raid" :
+     narrativeBearLiquidityRaid ? "Buy-Side Liquidity Raid" :
+     narrativeBullRetracement ? "Retracement into Demand" :
+     narrativeBearRetracement ? "Retracement into Supply" :
+     narrativeBullExpansion ? "Bullish Expansion" :
+     narrativeBearExpansion ? "Bearish Expansion" :
+     not bullBias and not bearBias and narrativeTrending ? "Repricing" :
+     not narrativeTrending ? "Consolidation" : "Transition"
+
+currentObjectiveText = decisionLongReady or decisionShortReady ? "Execute Trade Plan" :
+     decisionConflict ? "Stand Down" :
+     decisionDirection == 1 and not bullLiquidityState ? "Seek Sell-Side Liquidity" :
+     decisionDirection == -1 and not bearLiquidityState ? "Seek Buy-Side Liquidity" :
+     decisionDirection == 1 and not bullDisplacementState ? "Create Bullish Displacement" :
+     decisionDirection == -1 and not bearDisplacementState ? "Create Bearish Displacement" :
+     decisionDirection == 1 and not bullStructureState ? "Confirm Bullish Structure" :
+     decisionDirection == -1 and not bearStructureState ? "Confirm Bearish Structure" :
+     decisionDirection == 1 and not bullOBState ? "Return to Bullish Order Block" :
+     decisionDirection == -1 and not bearOBState ? "Return to Bearish Order Block" :
+     decisionDirection == 1 and requireFVGForSetup and not bullFVGState ? "Fill Bullish FVG" :
+     decisionDirection == -1 and requireFVGForSetup and not bearFVGState ? "Fill Bearish FVG" :
+     decisionDirection == 1 and requireOTEForDecision and not bullOTEState ? "Reach Bullish OTE" :
+     decisionDirection == -1 and requireOTEForDecision and not bearOTEState ? "Reach Bearish OTE" :
+     decisionDirection == 1 and ifaBullDecisionBlocked ? "Bull Core Ready — Confirm IFA" :
+     decisionDirection == -1 and ifaBearDecisionBlocked ? "Bear Core Ready — Confirm IFA" :
+     "Wait for Directional Clarity"
+
+expectedNextEventText = decisionLongReady or decisionShortReady ? "Manage Trade Plan" :
+     decisionConflict ? "Evidence Reset" :
+     decisionStage == "LIQUIDITY" ? (decisionDirection == 1 ? "Sweep SSL" : decisionDirection == -1 ? "Sweep BSL" : "Liquidity Sweep") :
+     decisionStage == "DISPLACEMENT" ? (decisionDirection == 1 ? "Bullish Displacement" : "Bearish Displacement") :
+     decisionStage == "STRUCTURE" ? (decisionDirection == 1 ? "Bullish BOS / CHoCH" : "Bearish BOS / CHoCH") :
+     decisionStage == "ORDER BLOCK" ? (decisionDirection == 1 ? "Bullish OB Retest" : "Bearish OB Retest") :
+     decisionStage == "FVG" ? (decisionDirection == 1 ? "Bullish FVG" : "Bearish FVG") :
+     decisionStage == "OTE" ? "OTE Retracement" :
+     decisionStage == "IFA" ? (decisionDirection == 1 ? "Bullish IFA Permission" : decisionDirection == -1 ? "Bearish IFA Permission" : "IFA Permission") :
+     decisionStage == "ENTRY" ? (requireConfirmationBreakForEntry ? "Break Confirmation Candle" : "Entry Confirmation") : "Stronger Confirmation"
+
+marketBriefingText = decisionLongReady ? "BUY active. Manage plan. Avoid shorts." :
+     decisionShortReady ? "SELL active. Manage plan. Avoid longs." :
+     decisionConflict ? "Conflict. Stand down." :
+     decisionDirection == 1 and not bullLiquidityState ? "Bullish lean. Wait for SSL." :
+     decisionDirection == -1 and not bearLiquidityState ? "Bearish lean. Wait for BSL." :
+     decisionDirection == 1 and not bullDisplacementState ? "Bullish build. Need displacement." :
+     decisionDirection == -1 and not bearDisplacementState ? "Bearish build. Need displacement." :
+     decisionDirection == 1 and not bullStructureState ? "Bullish build. Need BOS / CHoCH." :
+     decisionDirection == -1 and not bearStructureState ? "Bearish build. Need BOS / CHoCH." :
+     decisionDirection == 1 and not bullOBState ? "Bullish build. Need OB retest." :
+     decisionDirection == -1 and not bearOBState ? "Bearish build. Need OB retest." :
+     decisionDirection == 1 and requireFVGForSetup and not bullFVGState ? "Bullish build. Need FVG." :
+     decisionDirection == -1 and requireFVGForSetup and not bearFVGState ? "Bearish build. Need FVG." :
+     decisionDirection == 1 and requireOTEForDecision and not bullOTEState ? "Bullish build. Need OTE." :
+     decisionDirection == -1 and requireOTEForDecision and not bearOTEState ? "Bearish build. Need OTE." :
+     decisionDirection == 1 and ifaBullDecisionBlocked ? "Core BUY ready. IFA blocking." :
+     decisionDirection == -1 and ifaBearDecisionBlocked ? "Core SELL ready. IFA blocking." :
+     "No clean story. Wait."
+
+//=============================================================================
+// 13B. EXECUTION ENGINE — PR7
+// Tracks retests, confirmation candles, confirmation-candle break triggers,
+// entry-trigger locks, and de-duplicated visual markers without changing BUY / SELL logic.
+// Plot-count fix: debug data-window plots are disabled so the script stays under TradingView's 64-plot limit.
+//=============================================================================
+executionZoneOverlap(float zoneTop, float zoneBottom) =>
+    not na(zoneTop) and not na(zoneBottom) and high >= zoneBottom and low <= zoneTop
+
+bullOBRetestNow = (obActive or obMitigated) and activeBullish and executionZoneOverlap(activeOBTop, activeOBBottom)
+bearOBRetestNow = (obActive or obMitigated) and not activeBullish and executionZoneOverlap(activeOBTop, activeOBBottom)
+
+bullFVGRetestNow = (fvgActive or fvgFilled) and activeBullish and executionZoneOverlap(activeFVGTop, activeFVGBottom)
+bearFVGRetestNow = (fvgActive or fvgFilled) and not activeBullish and executionZoneOverlap(activeFVGTop, activeFVGBottom)
+
+executionBullRetestSignal = (bullOBRetestNow or bullFVGRetestNow) and not ((bullOBRetestNow[1] == true) or (bullFVGRetestNow[1] == true))
+executionBearRetestSignal = (bearOBRetestNow or bearFVGRetestNow) and not ((bearOBRetestNow[1] == true) or (bearFVGRetestNow[1] == true))
+
+var int lastBullOBRetestBar = na
+var int lastBearOBRetestBar = na
+var int lastBullFVGRetestBar = na
+var int lastBearFVGRetestBar = na
+
+if bullOBRetestNow
+    lastBullOBRetestBar := bar_index
+
+if bearOBRetestNow
+    lastBearOBRetestBar := bar_index
+
+if bullFVGRetestNow
+    lastBullFVGRetestBar := bar_index
+
+if bearFVGRetestNow
+    lastBearFVGRetestBar := bar_index
+
+recentBullOBRetest = not na(lastBullOBRetestBar) and bar_index - lastBullOBRetestBar <= executionRetestMemoryBars
+recentBearOBRetest = not na(lastBearOBRetestBar) and bar_index - lastBearOBRetestBar <= executionRetestMemoryBars
+recentBullFVGRetest = not na(lastBullFVGRetestBar) and bar_index - lastBullFVGRetestBar <= executionRetestMemoryBars
+recentBearFVGRetest = not na(lastBearFVGRetestBar) and bar_index - lastBearFVGRetestBar <= executionRetestMemoryBars
+
+executionDirectionalOBRetest = decisionDirection == 1 ? recentBullOBRetest :
+     decisionDirection == -1 ? recentBearOBRetest :
+     recentBullOBRetest or recentBearOBRetest
+
+executionDirectionalFVGRetest = decisionDirection == 1 ? recentBullFVGRetest :
+     decisionDirection == -1 ? recentBearFVGRetest :
+     recentBullFVGRetest or recentBearFVGRetest
+
+executionRetestText = executionDirectionalOBRetest and executionDirectionalFVGRetest ? "OB + FVG Retest" :
+     executionDirectionalOBRetest ? "OB Retest" :
+     executionDirectionalFVGRetest ? "FVG Retest" : "No Retest"
+
+//=============================================================================
+// 13C. SNIPER MODEL ENGINE PR2 / PR3 — INTERNAL LIQUIDITY SWEEP VALIDATION
+// Validates the internal liquidity sweep that occurs during the pullback into
+// the active order block / FVG, while keeping protected-level invalidation separate.
+// Bearish: internal BSL sweep during pullback is valid; protected high sweep invalidates.
+// Bullish: internal SSL sweep during pullback is valid; protected low sweep invalidates.
+//=============================================================================
+sniperBullPullbackNow = enableSniperModel and activeBullish and (bullOBRetestNow or bullFVGRetestNow)
+sniperBearPullbackNow = enableSniperModel and not activeBullish and (bearOBRetestNow or bearFVGRetestNow)
+
+var int sniperBullPullbackStartBar = na
+var int sniperBearPullbackStartBar = na
+var int sniperBullPullbackZoneBar = na
+var int sniperBearPullbackZoneBar = na
+var int sniperBullInternalSweepBar = na
+var int sniperBearInternalSweepBar = na
+var int sniperBullInternalSweepZoneBar = na
+var int sniperBearInternalSweepZoneBar = na
+
+if enableSniperModel and bullOBZoneSignal
+    sniperBullPullbackStartBar := na
+    sniperBullPullbackZoneBar := activeZoneCreatedBar
+    sniperBullInternalSweepBar := na
+    sniperBullInternalSweepZoneBar := activeZoneCreatedBar
+
+if enableSniperModel and bearOBZoneSignal
+    sniperBearPullbackStartBar := na
+    sniperBearPullbackZoneBar := activeZoneCreatedBar
+    sniperBearInternalSweepBar := na
+    sniperBearInternalSweepZoneBar := activeZoneCreatedBar
+
+if sniperBullPullbackNow and (na(sniperBullPullbackStartBar) or sniperBullPullbackZoneBar != activeZoneCreatedBar)
+    sniperBullPullbackStartBar := bar_index
+    sniperBullPullbackZoneBar := activeZoneCreatedBar
+
+if sniperBearPullbackNow and (na(sniperBearPullbackStartBar) or sniperBearPullbackZoneBar != activeZoneCreatedBar)
+    sniperBearPullbackStartBar := bar_index
+    sniperBearPullbackZoneBar := activeZoneCreatedBar
+
+sniperBullPullbackActive = enableSniperModel and not na(sniperBullPullbackStartBar) and
+     (na(sniperBullPullbackZoneBar) or na(activeZoneCreatedBar) or sniperBullPullbackZoneBar == activeZoneCreatedBar) and
+     (bar_index - sniperBullPullbackStartBar <= sniperInternalSweepMemoryBars) and
+     not sniperBullSetupInvalidated
+
+sniperBearPullbackActive = enableSniperModel and not na(sniperBearPullbackStartBar) and
+     (na(sniperBearPullbackZoneBar) or na(activeZoneCreatedBar) or sniperBearPullbackZoneBar == activeZoneCreatedBar) and
+     (bar_index - sniperBearPullbackStartBar <= sniperInternalSweepMemoryBars) and
+     not sniperBearSetupInvalidated
+
+sniperBullInternalSSLSweepNow = sniperBullPullbackActive and internalSSLSweep and not sniperBullProtectedLowSweptNow
+sniperBearInternalBSLSweepNow = sniperBearPullbackActive and internalBSLSweep and not sniperBearProtectedHighSweptNow
+
+if sniperBullInternalSSLSweepNow
+    sniperBullInternalSweepBar := bar_index
+    sniperBullInternalSweepZoneBar := activeZoneCreatedBar
+
+if sniperBearInternalBSLSweepNow
+    sniperBearInternalSweepBar := bar_index
+    sniperBearInternalSweepZoneBar := activeZoneCreatedBar
+
+sniperBullInternalSweepValid = enableSniperModel and not sniperBullSetupInvalidated and
+     not na(sniperBullInternalSweepBar) and
+     bar_index - sniperBullInternalSweepBar <= sniperInternalSweepMemoryBars and
+     (na(sniperBullInternalSweepZoneBar) or na(activeZoneCreatedBar) or sniperBullInternalSweepZoneBar == activeZoneCreatedBar)
+
+sniperBearInternalSweepValid = enableSniperModel and not sniperBearSetupInvalidated and
+     not na(sniperBearInternalSweepBar) and
+     bar_index - sniperBearInternalSweepBar <= sniperInternalSweepMemoryBars and
+     (na(sniperBearInternalSweepZoneBar) or na(activeZoneCreatedBar) or sniperBearInternalSweepZoneBar == activeZoneCreatedBar)
+
+sniperBullSweepText = sniperBullSetupInvalidated ? "Bull PL swept / reset" :
+     sniperBullInternalSweepValid ? "Internal SSL swept ✓" :
+     sniperBullPullbackActive ? "Need internal SSL" :
+     "Waiting for pullback"
+
+sniperBearSweepText = sniperBearSetupInvalidated ? "Bear PH swept / reset" :
+     sniperBearInternalSweepValid ? "Internal BSL swept ✓" :
+     sniperBearPullbackActive ? "Need internal BSL" :
+     "Waiting for pullback"
+
+sniperInternalSweepText = orderFlow == -1 ? sniperBearSweepText :
+     orderFlow == 1 ? sniperBullSweepText :
+     sniperBearPullbackActive or sniperBearInternalSweepValid ? sniperBearSweepText :
+     sniperBullPullbackActive or sniperBullInternalSweepValid ? sniperBullSweepText : "Waiting for pullback"
+
+sniperInternalSweepColor = str.contains(sniperInternalSweepText, "reset") ? bearColor :
+     str.contains(sniperInternalSweepText, "✓") ? bullColor :
+     str.contains(sniperInternalSweepText, "Need") ? liqColor : neutralColor
+
+//=============================================================================
+// 13D. SNIPER MODEL ENGINE PR3 — HTF LIQUIDITY ZONE CONTEXT
+// Higher timeframe finds the battlefield; lower timeframe finds the sniper entry.
+// This classifies the active parent zone as bullish demand, bearish supply, or waiting,
+// then pairs that zone with the expected liquidity side.
+//=============================================================================
+sniperActiveParentZone = enableSniperModel and (obActive or fvgActive or obMitigated or fvgFilled)
+
+sniperBullZoneContext = sniperActiveParentZone and activeBullish
+sniperBearZoneContext = sniperActiveParentZone and not activeBullish
+
+sniperBullHTFBiasOK = not sniperRequireHTFBiasForContext or bullBias or htfStructureBull
+sniperBearHTFBiasOK = not sniperRequireHTFBiasForContext or bearBias or htfStructureBear
+
+sniperBullLiquidityNearZone = recentSSLSweep or liquidityLevelNearActiveOB(lastSSLSweepLevel)
+sniperBearLiquidityNearZone = recentBSLSweep or liquidityLevelNearActiveOB(lastBSLSweepLevel)
+
+sniperBullHTFContextCandidate = sniperBullZoneContext and sniperBullHTFBiasOK and not sniperBullSetupInvalidated
+sniperBearHTFContextCandidate = sniperBearZoneContext and sniperBearHTFBiasOK and not sniperBearSetupInvalidated
+
+sniperBullHTFContextReady = sniperBullHTFContextCandidate and sniperBullLiquidityNearZone and not sniperBullSetupInvalidated
+sniperBearHTFContextReady = sniperBearHTFContextCandidate and sniperBearLiquidityNearZone and not sniperBearSetupInvalidated
+
+var int sniperHTFContextDirection = 0
+var int sniperHTFContextBar = na
+var int sniperHTFContextZoneBar = na
+var string sniperHTFContextLastText = "Waiting"
+
+if sniperBullHTFContextReady
+    sniperHTFContextDirection := 1
+    sniperHTFContextBar := bar_index
+    sniperHTFContextZoneBar := activeZoneCreatedBar
+    sniperHTFContextLastText := "Bullish Demand / SSL Below ✓"
+
+if sniperBearHTFContextReady
+    sniperHTFContextDirection := -1
+    sniperHTFContextBar := bar_index
+    sniperHTFContextZoneBar := activeZoneCreatedBar
+    sniperHTFContextLastText := "Bearish Supply / BSL Above ✓"
+
+sniperHTFContextFresh = enableSniperModel and not na(sniperHTFContextBar) and
+     bar_index - sniperHTFContextBar <= sniperHTFContextMemoryBars and
+     (na(sniperHTFContextZoneBar) or na(activeZoneCreatedBar) or sniperHTFContextZoneBar == activeZoneCreatedBar)
+
+sniperHTFZoneClassText = not sniperActiveParentZone ? "Waiting" :
+     sniperBullZoneContext ? "Bullish Demand" :
+     sniperBearZoneContext ? "Bearish Supply" : "Waiting"
+
+sniperBullHTFContextText = sniperBullSetupInvalidated ? "Bullish Demand / PL swept" :
+     sniperBullHTFContextReady ? "Bullish Demand / SSL Below ✓" :
+     sniperBullHTFContextCandidate ? "Bullish Demand / Need SSL" :
+     sniperBullZoneContext ? "Bullish Demand / Need HTF" : "Waiting"
+
+sniperBearHTFContextText = sniperBearSetupInvalidated ? "Bearish Supply / PH swept" :
+     sniperBearHTFContextReady ? "Bearish Supply / BSL Above ✓" :
+     sniperBearHTFContextCandidate ? "Bearish Supply / Need BSL" :
+     sniperBearZoneContext ? "Bearish Supply / Need HTF" : "Waiting"
+
+sniperHTFContextText = not enableSniperModel ? "Sniper disabled" :
+     orderFlow == -1 ? sniperBearHTFContextText :
+     orderFlow == 1 ? sniperBullHTFContextText :
+     sniperHTFContextFresh ? sniperHTFContextLastText :
+     sniperBearZoneContext ? sniperBearHTFContextText :
+     sniperBullZoneContext ? sniperBullHTFContextText : "Waiting for parent zone"
+
+sniperHTFContextColor = str.contains(sniperHTFContextText, "swept") ? bearColor :
+     str.contains(sniperHTFContextText, "Bearish Supply") ? bearColor :
+     str.contains(sniperHTFContextText, "Bullish Demand") ? bullColor :
+     str.contains(sniperHTFContextText, "Need") ? liqColor : neutralColor
+
+// Confirmation candle logic.
+// Bullish confirmation requires a bullish candle after/inside a bullish retest zone.
+// Bearish confirmation requires a bearish candle after/inside a bearish retest zone.
+executionCandleRange = math.max(high - low, syminfo.mintick)
+
+bullExecutionRejection = close > open and (math.min(open, close) - low) / executionCandleRange >= 0.30
+bearExecutionRejection = close < open and (high - math.max(open, close)) / executionCandleRange >= 0.30
+
+bullConfirmationNow = decisionDirection == 1 and (recentBullOBRetest or recentBullFVGRetest) and bullExecutionRejection
+bearConfirmationNow = decisionDirection == -1 and (recentBearOBRetest or recentBearFVGRetest) and bearExecutionRejection
+
+executionBullConfirmationSignal = bullConfirmationNow and not (bullConfirmationNow[1] == true)
+executionBearConfirmationSignal = bearConfirmationNow and not (bearConfirmationNow[1] == true)
+
+var int lastBullConfirmationBar = na
+var int lastBearConfirmationBar = na
+
+if bullConfirmationNow
+    lastBullConfirmationBar := bar_index
+
+if bearConfirmationNow
+    lastBearConfirmationBar := bar_index
+
+recentBullConfirmation = not na(lastBullConfirmationBar) and bar_index - lastBullConfirmationBar <= executionRetestMemoryBars
+recentBearConfirmation = not na(lastBearConfirmationBar) and bar_index - lastBearConfirmationBar <= executionRetestMemoryBars
+
+executionDirectionalConfirmation = decisionDirection == 1 ? recentBullConfirmation :
+     decisionDirection == -1 ? recentBearConfirmation :
+     recentBullConfirmation or recentBearConfirmation
+
+executionConfirmationText = recentBullConfirmation ? "Bullish Confirmation" :
+     recentBearConfirmation ? "Bearish Confirmation" : "Waiting"
+
+// PR7 Confirmation Candle Break Trigger.
+// A confirmation candle arms the setup. The entry trigger fires only after price
+// breaks that confirmation candle high/low, then PR6 locks the first trigger per zone.
+var float bullEntryConfirmationHigh = na
+var float bullEntryConfirmationLow = na
+var int bullEntryConfirmationBar = na
+var int bullEntryConfirmationZoneBar = na
+
+var float bearEntryConfirmationHigh = na
+var float bearEntryConfirmationLow = na
+var int bearEntryConfirmationBar = na
+var int bearEntryConfirmationZoneBar = na
+
+if executionBullConfirmationSignal
+    bullEntryConfirmationHigh := high
+    bullEntryConfirmationLow := low
+    bullEntryConfirmationBar := bar_index
+    bullEntryConfirmationZoneBar := activeZoneCreatedBar
+
+if executionBearConfirmationSignal
+    bearEntryConfirmationHigh := high
+    bearEntryConfirmationLow := low
+    bearEntryConfirmationBar := bar_index
+    bearEntryConfirmationZoneBar := activeZoneCreatedBar
+
+bullEntryConfirmationReady = not na(bullEntryConfirmationBar) and bar_index - bullEntryConfirmationBar <= confirmationBreakMemoryBars and
+     (na(bullEntryConfirmationZoneBar) or na(activeZoneCreatedBar) or bullEntryConfirmationZoneBar == activeZoneCreatedBar)
+
+bearEntryConfirmationReady = not na(bearEntryConfirmationBar) and bar_index - bearEntryConfirmationBar <= confirmationBreakMemoryBars and
+     (na(bearEntryConfirmationZoneBar) or na(activeZoneCreatedBar) or bearEntryConfirmationZoneBar == activeZoneCreatedBar)
+
+bullConfirmationBreakArmed = bullEntryConfirmationReady and bar_index > bullEntryConfirmationBar
+bearConfirmationBreakArmed = bearEntryConfirmationReady and bar_index > bearEntryConfirmationBar
+
+bullConfirmationHighBroken = not na(bullEntryConfirmationHigh) and (
+     entryTriggerBreakMode == "Close Break" ?
+     close > bullEntryConfirmationHigh and close[1] <= bullEntryConfirmationHigh :
+     high > bullEntryConfirmationHigh and high[1] <= bullEntryConfirmationHigh
+)
+
+bearConfirmationLowBroken = not na(bearEntryConfirmationLow) and (
+     entryTriggerBreakMode == "Close Break" ?
+     close < bearEntryConfirmationLow and close[1] >= bearEntryConfirmationLow :
+     low < bearEntryConfirmationLow and low[1] >= bearEntryConfirmationLow
+)
+
+bullConfirmationBreakCandidate = decisionDirection == 1 and bullConfirmationBreakArmed and bullConfirmationHighBroken and
+     not decisionConflict and (recentBullOBRetest or recentBullFVGRetest)
+
+bearConfirmationBreakCandidate = decisionDirection == -1 and bearConfirmationBreakArmed and bearConfirmationLowBroken and
+     not decisionConflict and (recentBearOBRetest or recentBearFVGRetest)
+
+// Optional fallback preserves PR6 behavior when the new break trigger is disabled.
+bullImmediateConfirmationCandidate = decisionDirection == 1 and executionBullConfirmationSignal and not decisionConflict and (recentBullOBRetest or recentBullFVGRetest)
+bearImmediateConfirmationCandidate = decisionDirection == -1 and executionBearConfirmationSignal and not decisionConflict and (recentBearOBRetest or recentBearFVGRetest)
+
+bullEntryTriggerCandidate = requireConfirmationBreakForEntry ? bullConfirmationBreakCandidate : bullImmediateConfirmationCandidate
+bearEntryTriggerCandidate = requireConfirmationBreakForEntry ? bearConfirmationBreakCandidate : bearImmediateConfirmationCandidate
+
+var int lastBullEntryTriggerBar = na
+var int lastBearEntryTriggerBar = na
+var int lastBullEntryTriggerZoneBar = na
+var int lastBearEntryTriggerZoneBar = na
+var string lastEntryTriggerSide = "None"
+
+bullEntryTriggerZoneOpen = not entryTriggerLockEnabled or na(activeZoneCreatedBar) or na(lastBullEntryTriggerZoneBar) or lastBullEntryTriggerZoneBar != activeZoneCreatedBar
+bearEntryTriggerZoneOpen = not entryTriggerLockEnabled or na(activeZoneCreatedBar) or na(lastBearEntryTriggerZoneBar) or lastBearEntryTriggerZoneBar != activeZoneCreatedBar
+
+executionBullEntryTriggerSignal = bullEntryTriggerCandidate and bullEntryTriggerZoneOpen
+executionBearEntryTriggerSignal = bearEntryTriggerCandidate and bearEntryTriggerZoneOpen
+
+if executionBullEntryTriggerSignal
+    lastBullEntryTriggerBar := bar_index
+    lastBullEntryTriggerZoneBar := activeZoneCreatedBar
+    lastEntryTriggerSide := "Long"
+
+if executionBearEntryTriggerSignal
+    lastBearEntryTriggerBar := bar_index
+    lastBearEntryTriggerZoneBar := activeZoneCreatedBar
+    lastEntryTriggerSide := "Short"
+
+bullCurrentZoneLocked = entryTriggerLockEnabled and not na(activeZoneCreatedBar) and not na(lastBullEntryTriggerZoneBar) and lastBullEntryTriggerZoneBar == activeZoneCreatedBar
+bearCurrentZoneLocked = entryTriggerLockEnabled and not na(activeZoneCreatedBar) and not na(lastBearEntryTriggerZoneBar) and lastBearEntryTriggerZoneBar == activeZoneCreatedBar
+
+executionCurrentZoneLocked = decisionDirection == 1 ? bullCurrentZoneLocked :
+     decisionDirection == -1 ? bearCurrentZoneLocked :
+     bullCurrentZoneLocked or bearCurrentZoneLocked
+
+executionTriggerActive = executionBullEntryTriggerSignal or executionBearEntryTriggerSignal
+executionBreakArmed = requireConfirmationBreakForEntry and (
+     decisionDirection == 1 ? bullConfirmationBreakArmed :
+     decisionDirection == -1 ? bearConfirmationBreakArmed :
+     bullConfirmationBreakArmed or bearConfirmationBreakArmed
+)
+executionSetupForming = (executionDirectionalOBRetest or executionDirectionalFVGRetest) and not executionDirectionalConfirmation and not executionCurrentZoneLocked
+
+executionEntryLockText = executionTriggerActive ? "Entry Break Trigger Active" :
+     executionCurrentZoneLocked ? "Entry Used / Locked" :
+     executionBreakArmed ? "Break Confirmation Candle" :
+     executionDirectionalConfirmation ? "Confirmation Ready" :
+     executionSetupForming ? "Setup Forming" : "Waiting"
+
+executionStatusText = decisionConflict ? "Stand Down" :
+     executionTriggerActive ? "Entry Trigger" :
+     executionCurrentZoneLocked ? "Entry Used" :
+     decisionLongReady or decisionShortReady ? "Triggered" :
+     executionBreakArmed ? "Break Armed" :
+     executionDirectionalConfirmation ? "Confirmation" :
+     executionDirectionalOBRetest or executionDirectionalFVGRetest ? "Retesting" :
+     decisionDirection == 1 or decisionDirection == -1 ? "Preparing" : "Not Ready"
+
+executionEntryPermissionText = executionBullEntryTriggerSignal ? "Long Trigger" :
+     executionBearEntryTriggerSignal ? "Short Trigger" :
+     executionCurrentZoneLocked ? "Entry Used / Locked" :
+     executionBreakArmed ? "Break Confirmation" :
+     executionDirectionalConfirmation ? "Confirmation Ready" :
+     executionSetupForming ? "Setup Forming" : "Wait"
+
+executionStatusValue = executionStatusText == "Triggered" ? 7 :
+     executionStatusText == "Entry Trigger" ? 6 :
+     executionStatusText == "Entry Used" ? 5 :
+     executionStatusText == "Break Armed" ? 4 :
+     executionStatusText == "Confirmation" ? 3 :
+     executionStatusText == "Retesting" ? 2 :
+     executionStatusText == "Preparing" ? 1 : 0
+
+executionEntryPermissionValue = executionEntryPermissionText == "Long Trigger" ? 2 :
+     executionEntryPermissionText == "Short Trigger" ? -2 :
+     executionEntryPermissionText == "Break Confirmation" ? 1.5 :
+     executionEntryPermissionText == "Confirmation Ready" ? 1 :
+     executionEntryPermissionText == "Entry Used / Locked" ? 0.5 : 0
+
+// Disabled debug data-window plot to stay under TradingView 64-plot limit: plot(showExecutionDebug ? (executionDirectionalOBRetest ? 1 : 0) : na, "Execution OB Retest", display = display.data_window)
+// Disabled debug data-window plot to stay under TradingView 64-plot limit: plot(showExecutionDebug ? (executionDirectionalFVGRetest ? 1 : 0) : na, "Execution FVG Retest", display = display.data_window)
+// Disabled debug data-window plot to stay under TradingView 64-plot limit: plot(showExecutionDebug ? (executionDirectionalConfirmation ? 1 : 0) : na, "Execution Confirmation", display = display.data_window)
+// Disabled debug data-window plot to stay under TradingView 64-plot limit: plot(showExecutionDebug ? (executionBreakArmed ? 1 : 0) : na, "Execution Confirmation Break Armed", display = display.data_window)
+// Disabled debug data-window plot to stay under TradingView 64-plot limit: plot(showExecutionDebug ? (bullConfirmationBreakCandidate ? 1 : bearConfirmationBreakCandidate ? -1 : 0) : na, "Execution Confirmation Break Candidate", display = display.data_window)
+// Disabled debug data-window plot to stay under TradingView 64-plot limit: plot(showExecutionDebug and requireConfirmationBreakForEntry ? bullEntryConfirmationHigh : na, "Bullish confirmation break high", display = display.data_window)
+// Disabled debug data-window plot to stay under TradingView 64-plot limit: plot(showExecutionDebug and requireConfirmationBreakForEntry ? bearEntryConfirmationLow : na, "Bearish confirmation break low", display = display.data_window)
+// Disabled debug data-window plot to stay under TradingView 64-plot limit: plot(showExecutionDebug ? executionStatusValue : na, "Execution Status Value", display = display.data_window)
+// Disabled debug data-window plot to stay under TradingView 64-plot limit: plot(showExecutionDebug ? executionEntryPermissionValue : na, "Execution Entry Permission", display = display.data_window)
+// Disabled debug data-window plot to stay under TradingView 64-plot limit: plot(showExecutionDebug ? (executionBullEntryTriggerSignal ? 1 : executionBearEntryTriggerSignal ? -1 : 0) : na, "Execution Entry Trigger Signal", display = display.data_window)
+// Disabled debug data-window plot to stay under TradingView 64-plot limit: plot(showExecutionDebug ? (executionCurrentZoneLocked ? 1 : 0) : na, "Execution Entry Zone Locked", display = display.data_window)
+
+// PR8 visual de-duplication.
+// Execution states still update normally; only repeated chart markers are filtered.
+var int lastBullRetestMarkerBar = na
+var int lastBearRetestMarkerBar = na
+var int lastBullConfirmationMarkerBar = na
+var int lastBearConfirmationMarkerBar = na
+var int lastBullRetestMarkerZoneBar = na
+var int lastBearRetestMarkerZoneBar = na
+var int lastBullConfirmationMarkerZoneBar = na
+var int lastBearConfirmationMarkerZoneBar = na
+
+bullRetestMarkerCooldownOK = na(lastBullRetestMarkerBar) or bar_index - lastBullRetestMarkerBar > executionMarkerCooldownBars
+bearRetestMarkerCooldownOK = na(lastBearRetestMarkerBar) or bar_index - lastBearRetestMarkerBar > executionMarkerCooldownBars
+bullConfirmationMarkerCooldownOK = na(lastBullConfirmationMarkerBar) or bar_index - lastBullConfirmationMarkerBar > executionMarkerCooldownBars
+bearConfirmationMarkerCooldownOK = na(lastBearConfirmationMarkerBar) or bar_index - lastBearConfirmationMarkerBar > executionMarkerCooldownBars
+
+bullRetestMarkerZoneOK = not executionMarkersOncePerZone or na(activeZoneCreatedBar) or na(lastBullRetestMarkerZoneBar) or lastBullRetestMarkerZoneBar != activeZoneCreatedBar
+bearRetestMarkerZoneOK = not executionMarkersOncePerZone or na(activeZoneCreatedBar) or na(lastBearRetestMarkerZoneBar) or lastBearRetestMarkerZoneBar != activeZoneCreatedBar
+bullConfirmationMarkerZoneOK = not executionMarkersOncePerZone or na(activeZoneCreatedBar) or na(lastBullConfirmationMarkerZoneBar) or lastBullConfirmationMarkerZoneBar != activeZoneCreatedBar
+bearConfirmationMarkerZoneOK = not executionMarkersOncePerZone or na(activeZoneCreatedBar) or na(lastBearConfirmationMarkerZoneBar) or lastBearConfirmationMarkerZoneBar != activeZoneCreatedBar
+
+executionBullRetestMarkerSignal = executionBullRetestSignal and bullRetestMarkerCooldownOK and bullRetestMarkerZoneOK
+executionBearRetestMarkerSignal = executionBearRetestSignal and bearRetestMarkerCooldownOK and bearRetestMarkerZoneOK
+executionBullConfirmationMarkerSignal = executionBullConfirmationSignal and bullConfirmationMarkerCooldownOK and bullConfirmationMarkerZoneOK
+executionBearConfirmationMarkerSignal = executionBearConfirmationSignal and bearConfirmationMarkerCooldownOK and bearConfirmationMarkerZoneOK
+
+if executionBullRetestMarkerSignal
+    lastBullRetestMarkerBar := bar_index
+    lastBullRetestMarkerZoneBar := activeZoneCreatedBar
+
+if executionBearRetestMarkerSignal
+    lastBearRetestMarkerBar := bar_index
+    lastBearRetestMarkerZoneBar := activeZoneCreatedBar
+
+if executionBullConfirmationMarkerSignal
+    lastBullConfirmationMarkerBar := bar_index
+    lastBullConfirmationMarkerZoneBar := activeZoneCreatedBar
+
+if executionBearConfirmationMarkerSignal
+    lastBearConfirmationMarkerBar := bar_index
+    lastBearConfirmationMarkerZoneBar := activeZoneCreatedBar
+
+// Disabled debug data-window plot to stay under TradingView 64-plot limit: plot(showExecutionDebug ? (executionBullRetestMarkerSignal ? 1 : 0) : na, "Bullish execution retest marker allowed", display = display.data_window)
+// Disabled debug data-window plot to stay under TradingView 64-plot limit: plot(showExecutionDebug ? (executionBearRetestMarkerSignal ? 1 : 0) : na, "Bearish execution retest marker allowed", display = display.data_window)
+// Disabled debug data-window plot to stay under TradingView 64-plot limit: plot(showExecutionDebug ? (executionBullConfirmationMarkerSignal ? 1 : 0) : na, "Bullish execution confirmation marker allowed", display = display.data_window)
+// Disabled debug data-window plot to stay under TradingView 64-plot limit: plot(showExecutionDebug ? (executionBearConfirmationMarkerSignal ? 1 : 0) : na, "Bearish execution confirmation marker allowed", display = display.data_window)
+
+plotshape(showExecutionRetestMarkers and visualMode != "Minimal" and (labelModeFull or labelModeShort) and executionBullRetestMarkerSignal, "Bullish execution retest marker RT", shape.circle, location.belowbar, bullColor, size = size.tiny, text = "RT", textcolor = color.white)
+plotshape(showExecutionRetestMarkers and visualMode != "Minimal" and (labelModeFull or labelModeShort) and executionBearRetestMarkerSignal, "Bearish execution retest marker RT", shape.circle, location.abovebar, bearColor, size = size.tiny, text = "RT", textcolor = color.white)
+plotshape(showExecutionRetestMarkers and visualMode != "Minimal" and labelModeMinimal and executionBullRetestMarkerSignal, "Bullish execution retest marker R", shape.circle, location.belowbar, bullColor, size = size.tiny, text = "R", textcolor = color.white)
+plotshape(showExecutionRetestMarkers and visualMode != "Minimal" and labelModeMinimal and executionBearRetestMarkerSignal, "Bearish execution retest marker R", shape.circle, location.abovebar, bearColor, size = size.tiny, text = "R", textcolor = color.white)
+
+plotshape(showExecutionConfirmationMarkers and visualMode != "Minimal" and labelModeFull and executionBullConfirmationMarkerSignal, "Bullish execution confirmation marker CONF", shape.labelup, location.belowbar, bullColor, size = size.tiny, text = "CONF", textcolor = color.white)
+plotshape(showExecutionConfirmationMarkers and visualMode != "Minimal" and labelModeFull and executionBearConfirmationMarkerSignal, "Bearish execution confirmation marker CONF", shape.labeldown, location.abovebar, bearColor, size = size.tiny, text = "CONF", textcolor = color.white)
+plotshape(showExecutionConfirmationMarkers and visualMode != "Minimal" and labelModeShort and executionBullConfirmationMarkerSignal, "Bullish execution confirmation marker CNF", shape.labelup, location.belowbar, bullColor, size = size.tiny, text = "CNF", textcolor = color.white)
+plotshape(showExecutionConfirmationMarkers and visualMode != "Minimal" and labelModeShort and executionBearConfirmationMarkerSignal, "Bearish execution confirmation marker CNF", shape.labeldown, location.abovebar, bearColor, size = size.tiny, text = "CNF", textcolor = color.white)
+plotshape(showExecutionConfirmationMarkers and visualMode != "Minimal" and labelModeMinimal and executionBullConfirmationMarkerSignal, "Bullish execution confirmation marker C", shape.labelup, location.belowbar, bullColor, size = size.tiny, text = "C", textcolor = color.white)
+plotshape(showExecutionConfirmationMarkers and visualMode != "Minimal" and labelModeMinimal and executionBearConfirmationMarkerSignal, "Bearish execution confirmation marker C", shape.labeldown, location.abovebar, bearColor, size = size.tiny, text = "C", textcolor = color.white)
+
+plotshape(showExecutionEntryTriggerMarkers and visualMode != "Minimal" and labelModeFull and executionBullEntryTriggerSignal, "Bullish execution entry trigger marker TRIGGER", shape.diamond, location.belowbar, bullColor, size = size.small, text = "TRIGGER", textcolor = color.white)
+plotshape(showExecutionEntryTriggerMarkers and visualMode != "Minimal" and labelModeFull and executionBearEntryTriggerSignal, "Bearish execution entry trigger marker TRIGGER", shape.diamond, location.abovebar, bearColor, size = size.small, text = "TRIGGER", textcolor = color.white)
+plotshape(showExecutionEntryTriggerMarkers and visualMode != "Minimal" and labelModeShort and executionBullEntryTriggerSignal, "Bullish execution entry trigger marker TRG", shape.diamond, location.belowbar, bullColor, size = size.tiny, text = "TRG", textcolor = color.white)
+plotshape(showExecutionEntryTriggerMarkers and visualMode != "Minimal" and labelModeShort and executionBearEntryTriggerSignal, "Bearish execution entry trigger marker TRG", shape.diamond, location.abovebar, bearColor, size = size.tiny, text = "TRG", textcolor = color.white)
+plotshape(showExecutionEntryTriggerMarkers and visualMode != "Minimal" and labelModeMinimal and executionBullEntryTriggerSignal, "Bullish execution entry trigger marker T", shape.diamond, location.belowbar, bullColor, size = size.tiny, text = "T", textcolor = color.white)
+plotshape(showExecutionEntryTriggerMarkers and visualMode != "Minimal" and labelModeMinimal and executionBearEntryTriggerSignal, "Bearish execution entry trigger marker T", shape.diamond, location.abovebar, bearColor, size = size.tiny, text = "T", textcolor = color.white)
 
 //=============================================================================
 // 13. TRADE PLAN
@@ -796,11 +3196,11 @@ clearTradePlan() =>
     line.delete(targetLine)
     label.delete(tradeLabel)
 
-if showTradePlan and bullQualified
+if showTradePlan and decisionLongSignal
     clearTradePlan()
 
     float entry = entryMode == "OB Proximal" ? activeOBTop :
-         entryMode == "FVG Midpoint" ? (activeFVGTop + activeFVGBottom) / 2.0 :
+         entryMode == "FVG Midpoint" and fvgActive ? (activeFVGTop + activeFVGBottom) / 2.0 :
          (activeOBTop + activeOBBottom) / 2.0
 
     float stop = activeOBBottom - atr * stopBufferATR
@@ -817,18 +3217,18 @@ if showTradePlan and bullQualified
     targetLine := line.new(bar_index, target, bar_index + 20, target, xloc = xloc.bar_index, color = bullColor, style = line.style_dotted)
     tradeLabel := label.new(
          bar_index + 20, entry,
-         "BUY  " + str.tostring(bullScore) + "%\nE " + str.tostring(entry, format.mintick) +
+         "BUY  " + str.tostring(decisionScore) + "%\nE " + str.tostring(entry, format.mintick) +
          "\nSL " + str.tostring(stop, format.mintick) +
          "\nTP " + str.tostring(target, format.mintick),
          xloc = xloc.bar_index, yloc = yloc.price,
          style = label.style_label_left, color = bullColor, textcolor = color.white
      )
 
-if showTradePlan and bearQualified
+if showTradePlan and decisionShortSignal
     clearTradePlan()
 
     float entry = entryMode == "OB Proximal" ? activeOBBottom :
-         entryMode == "FVG Midpoint" ? (activeFVGTop + activeFVGBottom) / 2.0 :
+         entryMode == "FVG Midpoint" and fvgActive ? (activeFVGTop + activeFVGBottom) / 2.0 :
          (activeOBTop + activeOBBottom) / 2.0
 
     float stop = activeOBTop + atr * stopBufferATR
@@ -845,15 +3245,28 @@ if showTradePlan and bearQualified
     targetLine := line.new(bar_index, target, bar_index + 20, target, xloc = xloc.bar_index, color = bullColor, style = line.style_dotted)
     tradeLabel := label.new(
          bar_index + 20, entry,
-         "SELL  " + str.tostring(bearScore) + "%\nE " + str.tostring(entry, format.mintick) +
+         "SELL  " + str.tostring(decisionScore) + "%\nE " + str.tostring(entry, format.mintick) +
          "\nSL " + str.tostring(stop, format.mintick) +
          "\nTP " + str.tostring(target, format.mintick),
          xloc = xloc.bar_index, yloc = yloc.price,
          style = label.style_label_left, color = bearColor, textcolor = color.white
      )
 
-plotshape(showSetupArrows and visualMode != "Minimal" and bullQualified, "Qualified bullish Genesis setup", shape.triangleup, location.belowbar, bullColor, size = size.small, text = "ICE")
-plotshape(showSetupArrows and visualMode != "Minimal" and bearQualified, "Qualified bearish Genesis setup", shape.triangledown, location.abovebar, bearColor, size = size.small, text = "ICE")
+// Remove stale plans as soon as the centralized decision is no longer BUY or SELL.
+if lastPlanDirection != "WAIT" and not decisionLongReady and not decisionShortReady
+    clearTradePlan()
+    entryLine := na
+    stopLine := na
+    targetLine := na
+    tradeLabel := na
+    lastPlanEntry := na
+    lastPlanStop := na
+    lastPlanTarget := na
+    lastPlanRR := na
+    lastPlanDirection := "WAIT"
+
+plotshape(showSetupArrows and visualMode != "Minimal" and decisionLongSignal, "Qualified bullish Genesis setup", shape.triangleup, location.belowbar, bullColor, size = size.small, text = "ICE")
+plotshape(showSetupArrows and visualMode != "Minimal" and decisionShortSignal, "Qualified bearish Genesis setup", shape.triangledown, location.abovebar, bearColor, size = size.small, text = "ICE")
 
 //=============================================================================
 // 14. OPTIONAL HTF LEVELS
@@ -864,28 +3277,10 @@ plot(showHTFLevels ? htfProtectedLow : na, "HTF Protected Low", color = color.ne
 //=============================================================================
 // 15. INSTITUTIONAL DASHBOARD
 //=============================================================================
-gradeFromScore(int score) =>
-    score >= 95 ? "A+" : score >= 90 ? "A" : score >= 85 ? "B+" : score >= 80 ? "B" : score >= 70 ? "C" : "PASS"
-
-var int lastScore = 0
-var string lastDecision = "WAIT"
-var string lastGrade = "-"
-var string lastStructureText = "Waiting"
-var string lastOBValidationText = "Waiting"
-
-if bullStructureEvent
-    lastScore := bullScore
-    lastDecision := bullQualified ? "LONG" : "WAIT"
-    lastGrade := gradeFromScore(bullScore)
-    lastStructureText := bullMSS ? "Bullish CHoCH" : "Bullish BOS"
-    lastOBValidationText := bullInstitutionalOB ? (bullOBFVGOverlap ? "Valid + overlap" : "Valid") : "Rejected"
-
-if bearStructureEvent
-    lastScore := bearScore
-    lastDecision := bearQualified ? "SHORT" : "WAIT"
-    lastGrade := gradeFromScore(bearScore)
-    lastStructureText := bearMSS ? "Bearish CHoCH" : "Bearish BOS"
-    lastOBValidationText := bearInstitutionalOB ? (bearOBFVGOverlap ? "Valid + overlap" : "Valid") : "Rejected"
+// Decision Engine owns the user-facing score, grade, and recommendation.
+lastScore = decisionScore
+lastDecision = decisionRecommendation
+lastGrade = decisionGrade
 
 flowText = orderFlow == 1 ? "Bullish" : orderFlow == -1 ? "Bearish" : "Undetermined"
 zoneText = obActive ? (activeBullish ? "Bullish OB" : "Bearish OB") : "Waiting"
@@ -900,80 +3295,241 @@ ote79 = extRangeValid ? oteHigh - (oteHigh - oteLow) * 0.79 : na
 ote618 = extRangeValid ? oteHigh - (oteHigh - oteLow) * 0.618 : na
 
 check(bool condition, string yesText, string noText) => condition ? "●  " + yesText : "○  " + noText
+dashboardEnabled = showDashboard and dashboardMode != "Off"
+isFull = dashboardMode == "Full"
+isMorningBrief = dashboardMode == "Morning Brief"
+isExecutionFocus = dashboardMode == "Execution"
+isTradeManagement = dashboardMode == "Trade Management"
+isCompact = dashboardMode == "Compact"
+isMinimal = dashboardMode == "Minimal"
+var table dash = table.new(position.top_right, 2, 34, border_width = 1, border_color = color.new(neutralColor, 65))
 
-var table dash = table.new(position.top_right, 2, 30, border_width = 1, border_color = color.new(neutralColor, 65))
+if barstate.islast
+    table.clear(dash, 0, 0, 1, 33)
 
-if barstate.islast and showDashboard
-    table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-    table.cell(dash, 1, 0, "v1.0 A3", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-    table.cell(dash, 0, 1, "INSTITUTIONAL EDGE", text_color = neutralColor, bgcolor = panelColor, text_size = size.tiny)
-    table.cell(dash, 1, 1, "", bgcolor = panelColor)
+    if dashboardEnabled
+        bool directionBull = decisionDirection == 1
+        bool dashboardDisplacement = directionBull ? recentBullDisplacement : recentBearDisplacement
+        bool dashboardOTE = extRangeValid and close <= ote618 and close >= ote79
+        string compactMarket = marketDirectionText + " / " + marketPhaseText
+        string compactLiqDisp = (directionBull ? (recentSSLSweep ? "SSL ✓" : "SSL …") : (recentBSLSweep ? "BSL ✓" : "BSL …")) + " / " + (dashboardDisplacement ? "Disp ✓" : "Disp …")
+        string compactStructOB = latestStructureEvent + " / " + (obActive ? zoneText : "OB …")
+        string compactFvgOTE = (fvgActive ? fvgText : "FVG …") + " / " + (dashboardOTE ? "OTE ✓" : "OTE …")
+        string compactScore = str.tostring(lastScore) + "% / " + lastGrade
+        color decisionColor = lastDecision == "BUY" ? bullColor : lastDecision == "SELL" ? bearColor : neutralColor
+        color executionEntryPermissionColor = executionEntryPermissionText == "Long Trigger" ? bullColor : executionEntryPermissionText == "Short Trigger" ? bearColor : (executionEntryPermissionText == "Confirmation Ready" or executionEntryPermissionText == "Break Confirmation") ? liqColor : neutralColor
+        string dashboardHtfSession = biasText + " / " + activeSessionText
+        string dashboardPlanText = showSmartTradePanel and lastPlanDirection != "WAIT" ? lastPlanDirection : "No active plan"
+        string dashboardEntryStop = showSmartTradePanel and not na(lastPlanEntry) and not na(lastPlanStop) ? str.tostring(lastPlanEntry, format.mintick) + " / " + str.tostring(lastPlanStop, format.mintick) : "—"
+        string dashboardTargetRR = showSmartTradePanel and not na(lastPlanTarget) and not na(lastPlanRR) ? str.tostring(lastPlanTarget, format.mintick) + " / 1:" + str.tostring(lastPlanRR, "#.##") : "—"
 
-    table.cell(dash, 0, 2, "MARKET CONTEXT", text_color = color.white, bgcolor = color.new(color.black, 0))
-    table.cell(dash, 1, 2, "", bgcolor = color.new(color.black, 0))
-    table.cell(dash, 0, 3, "HTF Bias", text_color = neutralColor, bgcolor = panelColor)
-    table.cell(dash, 1, 3, biasText, text_color = bullBias ? bullColor : bearBias ? bearColor : neutralColor, bgcolor = panelColor)
-    table.cell(dash, 0, 4, "Market State", text_color = neutralColor, bgcolor = panelColor)
-    table.cell(dash, 1, 4, marketStateText, text_color = neutralColor, bgcolor = panelColor)
-    table.cell(dash, 0, 5, "Order Flow", text_color = neutralColor, bgcolor = panelColor)
-    table.cell(dash, 1, 5, flowText, text_color = orderFlow == 1 ? bullColor : orderFlow == -1 ? bearColor : neutralColor, bgcolor = panelColor)
-    table.cell(dash, 0, 6, "Premium / Discount", text_color = neutralColor, bgcolor = panelColor)
-    table.cell(dash, 1, 6, premiumDiscountText, text_color = premiumDiscountText == "Discount" ? bullColor : premiumDiscountText == "Premium" ? bearColor : neutralColor, bgcolor = panelColor)
+        if isMorningBrief
+            table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 IFA PR14", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 0, 1, "MORNING BRIEF", text_color = color.white, bgcolor = color.new(color.black, 0))
+            table.cell(dash, 1, 1, "", bgcolor = color.new(color.black, 0))
 
-    table.cell(dash, 0, 7, "SETUP CHECKLIST", text_color = color.white, bgcolor = color.new(color.black, 0))
-    table.cell(dash, 1, 7, "", bgcolor = color.new(color.black, 0))
-    bool directionBull = orderFlow == 1
-    table.cell(dash, 0, 8, "1. Liquidity", text_color = neutralColor, bgcolor = panelColor)
-    table.cell(dash, 1, 8, check(directionBull ? recentSSLSweep : recentBSLSweep, directionBull ? "SSL Swept" : "BSL Swept", "Waiting"), text_color = (recentSSLSweep or recentBSLSweep) ? bullColor : neutralColor, bgcolor = panelColor)
-    table.cell(dash, 0, 9, "2. Displacement", text_color = neutralColor, bgcolor = panelColor)
-    bool dashboardDisplacement = directionBull ? recentBullDisplacement : recentBearDisplacement
-    table.cell(dash, 1, 9, check(dashboardDisplacement, "Strong", "Waiting"), text_color = dashboardDisplacement ? bullColor : neutralColor, bgcolor = panelColor)
-    table.cell(dash, 0, 10, "3. Structure", text_color = neutralColor, bgcolor = panelColor)
-    table.cell(dash, 1, 10, latestStructureEvent, text_color = str.contains(latestStructureEvent, "Bullish") ? bullColor : str.contains(latestStructureEvent, "Bearish") ? bearColor : neutralColor, bgcolor = panelColor)
-    table.cell(dash, 0, 11, "4. Order Block", text_color = neutralColor, bgcolor = panelColor)
-    table.cell(dash, 1, 11, check(obActive, zoneText, "Waiting"), text_color = obActive ? (activeBullish ? bullColor : bearColor) : neutralColor, bgcolor = panelColor)
-    table.cell(dash, 0, 12, "5. FVG", text_color = neutralColor, bgcolor = panelColor)
-    table.cell(dash, 1, 12, check(fvgActive, fvgText, "Waiting"), text_color = fvgActive ? (activeBullish ? bullColor : bearColor) : neutralColor, bgcolor = panelColor)
-    table.cell(dash, 0, 13, "6. OTE", text_color = neutralColor, bgcolor = panelColor)
-    table.cell(dash, 1, 13, check(extRangeValid and close <= ote618 and close >= ote79, "In OTE", "Outside"), text_color = extRangeValid and close <= ote618 and close >= ote79 ? bullColor : neutralColor, bgcolor = panelColor)
-    table.cell(dash, 0, 14, "7. HTF Alignment", text_color = neutralColor, bgcolor = panelColor)
-    table.cell(dash, 1, 14, check(bullBias or bearBias, biasText, "Mixed"), text_color = bullBias ? bullColor : bearBias ? bearColor : neutralColor, bgcolor = panelColor)
-    table.cell(dash, 0, 15, "8. Session", text_color = neutralColor, bgcolor = panelColor)
-    table.cell(dash, 1, 15, check(activeSessionText != "Inactive", activeSessionText, "Inactive"), text_color = activeSessionText != "Inactive" ? bullColor : neutralColor, bgcolor = panelColor)
+            table.cell(dash, 0, 2, "Direction", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 2, marketDirectionText, text_color = marketDirectionColor, bgcolor = panelColor)
 
-    table.cell(dash, 0, 16, "TRADE DECISION", text_color = color.white, bgcolor = color.new(color.black, 0))
-    table.cell(dash, 1, 16, "", bgcolor = color.new(color.black, 0))
-    table.cell(dash, 0, 17, "Bias", text_color = neutralColor, bgcolor = panelColor)
-    table.cell(dash, 1, 17, lastDecision, text_color = lastDecision == "LONG" ? bullColor : lastDecision == "SHORT" ? bearColor : neutralColor, bgcolor = panelColor, text_size = size.large)
-    table.cell(dash, 0, 18, "Score", text_color = neutralColor, bgcolor = panelColor)
-    table.cell(dash, 1, 18, str.tostring(lastScore) + "%", text_color = lastScore >= minimumScore ? bullColor : neutralColor, bgcolor = panelColor)
-    table.cell(dash, 0, 19, "Grade", text_color = neutralColor, bgcolor = panelColor)
-    table.cell(dash, 1, 19, lastGrade, text_color = lastScore >= minimumScore ? bullColor : neutralColor, bgcolor = panelColor)
+            table.cell(dash, 0, 3, "Narrative", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 3, institutionalNarrativeText, text_color = marketDirectionColor, bgcolor = panelColor)
 
-    table.cell(dash, 0, 20, "OTE ZONE (61.8%-79%)", text_color = color.white, bgcolor = color.new(color.black, 0))
-    table.cell(dash, 1, 20, "", bgcolor = color.new(color.black, 0))
-    table.cell(dash, 0, 21, "External High", text_color = neutralColor, bgcolor = panelColor)
-    table.cell(dash, 1, 21, extRangeValid ? str.tostring(oteHigh, format.mintick) : "—", text_color = color.white, bgcolor = panelColor)
-    table.cell(dash, 0, 22, "79% / 61.8%", text_color = neutralColor, bgcolor = panelColor)
-    table.cell(dash, 1, 22, extRangeValid ? str.tostring(ote79, format.mintick) + " / " + str.tostring(ote618, format.mintick) : "—", text_color = bullColor, bgcolor = panelColor)
-    table.cell(dash, 0, 23, "External Low", text_color = neutralColor, bgcolor = panelColor)
-    table.cell(dash, 1, 23, extRangeValid ? str.tostring(oteLow, format.mintick) : "—", text_color = color.white, bgcolor = panelColor)
+            table.cell(dash, 0, 4, "Phase", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 4, marketPhaseText, text_color = marketPhaseText == "Conflict" ? bearColor : neutralColor, bgcolor = panelColor)
 
-    table.cell(dash, 0, 24, "SMART TRADE PLAN", text_color = color.white, bgcolor = color.new(color.black, 0))
-    table.cell(dash, 1, 24, showSmartTradePanel ? lastPlanDirection : "Hidden", text_color = lastPlanDirection == "LONG" ? bullColor : lastPlanDirection == "SHORT" ? bearColor : neutralColor, bgcolor = color.new(color.black, 0))
-    table.cell(dash, 0, 25, "Entry", text_color = neutralColor, bgcolor = panelColor)
-    table.cell(dash, 1, 25, showSmartTradePanel and not na(lastPlanEntry) ? str.tostring(lastPlanEntry, format.mintick) : "—", text_color = color.white, bgcolor = panelColor)
-    table.cell(dash, 0, 26, "Stop", text_color = neutralColor, bgcolor = panelColor)
-    table.cell(dash, 1, 26, showSmartTradePanel and not na(lastPlanStop) ? str.tostring(lastPlanStop, format.mintick) : "—", text_color = bearColor, bgcolor = panelColor)
-    table.cell(dash, 0, 27, "Target", text_color = neutralColor, bgcolor = panelColor)
-    table.cell(dash, 1, 27, showSmartTradePanel and not na(lastPlanTarget) ? str.tostring(lastPlanTarget, format.mintick) : "—", text_color = bullColor, bgcolor = panelColor)
-    table.cell(dash, 0, 28, "Risk : Reward", text_color = neutralColor, bgcolor = panelColor)
-    table.cell(dash, 1, 28, showSmartTradePanel and not na(lastPlanRR) ? "1 : " + str.tostring(lastPlanRR, "#.##") : "—", text_color = color.white, bgcolor = panelColor)
-    table.cell(dash, 0, 29, "Structure Module", text_color = neutralColor, bgcolor = panelColor)
-    table.cell(dash, 1, 29, latestStructureExternal ? "External confirmed" : latestStructureEvent == "Waiting" ? "Waiting" : "Internal confirmed", text_color = latestStructureEvent == "Waiting" ? neutralColor : color.white, bgcolor = panelColor)
+            table.cell(dash, 0, 5, "Briefing", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 5, marketBriefingText, text_color = marketDirectionColor, bgcolor = panelColor, text_size = size.small)
 
-if barstate.islast and not showDashboard
-    table.clear(dash, 0, 0, 1, 29)
+            table.cell(dash, 0, 6, "Decision", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 6, lastDecision, text_color = decisionColor, bgcolor = panelColor, text_size = size.large)
+
+            table.cell(dash, 0, 7, "Score / Grade", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 7, compactScore, text_color = lastScore >= minimumScore ? bullColor : neutralColor, bgcolor = panelColor)
+
+            table.cell(dash, 0, 8, "Objective", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 8, currentObjectiveText, text_color = marketDirectionColor, bgcolor = panelColor, text_size = size.tiny)
+
+            table.cell(dash, 0, 9, "Next Event", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 9, expectedNextEventText, text_color = marketDirectionColor, bgcolor = panelColor, text_size = size.tiny)
+
+            table.cell(dash, 0, 10, "Session", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 10, activeSessionText, text_color = activeSessionText != "Inactive" ? bullColor : neutralColor, bgcolor = panelColor)
+
+        else if isExecutionFocus
+            table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 IFA PR14", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 0, 1, "EXECUTION FOCUS", text_color = color.white, bgcolor = color.new(color.black, 0))
+            table.cell(dash, 1, 1, lastDecision, text_color = decisionColor, bgcolor = color.new(color.black, 0), text_size = size.large)
+
+            table.cell(dash, 0, 2, "Liquidity", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 2, check(directionBull ? recentSSLSweep : recentBSLSweep, directionBull ? "SSL Swept" : "BSL Swept", directionBull ? "Need SSL" : "Need BSL"), text_color = (recentSSLSweep or recentBSLSweep) ? bullColor : neutralColor, bgcolor = panelColor)
+
+            table.cell(dash, 0, 3, "Displacement", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 3, check(dashboardDisplacement, "Strong", directionBull ? "Need Bull Disp" : "Need Bear Disp"), text_color = dashboardDisplacement ? bullColor : neutralColor, bgcolor = panelColor)
+
+            table.cell(dash, 0, 4, "Structure", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 4, latestStructureEvent, text_color = str.contains(latestStructureEvent, "Bullish") ? bullColor : str.contains(latestStructureEvent, "Bearish") ? bearColor : neutralColor, bgcolor = panelColor)
+
+            table.cell(dash, 0, 5, "Zig Zag", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 5, zigZagDashboardText, text_color = zigZagDashboardColor, bgcolor = panelColor, text_size = size.tiny)
+
+            table.cell(dash, 0, 6, "IFA Gate", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 6, ifaDashboardText, text_color = ifaDashboardColor, bgcolor = panelColor, text_size = size.tiny)
+
+            table.cell(dash, 0, 7, "IFA Quality", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 7, ifaQualityDashboardText, text_color = ifaQualityDashboardColor, bgcolor = panelColor, text_size = size.tiny)
+
+            table.cell(dash, 0, 8, "IFA Imbalance", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 8, ifaImbalanceDashboardText, text_color = ifaImbalanceDashboardColor, bgcolor = panelColor, text_size = size.tiny)
+
+            table.cell(dash, 0, 9, "IFA OB", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 9, ifaOBQualityDashboardText, text_color = ifaOBQualityDashboardColor, bgcolor = panelColor, text_size = size.tiny)
+
+            table.cell(dash, 0, 10, "OB / FVG", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 10, (obActive ? zoneText : "OB ...") + " / " + (fvgActive ? fvgText : "FVG ..."), text_color = obActive ? (activeBullish ? bullColor : bearColor) : neutralColor, bgcolor = panelColor, text_size = size.tiny)
+
+            table.cell(dash, 0, 11, "Retest", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 11, executionRetestText, text_color = executionRetestText == "No Retest" ? neutralColor : marketDirectionColor, bgcolor = panelColor)
+
+            table.cell(dash, 0, 12, "Execution", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 12, executionStatusText + " / " + executionEntryLockText, text_color = executionStatusText == "Triggered" ? bullColor : executionStatusText == "Stand Down" ? bearColor : neutralColor, bgcolor = panelColor)
+
+            table.cell(dash, 0, 13, "Entry Permission", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 13, executionEntryPermissionText, text_color = executionEntryPermissionColor, bgcolor = panelColor)
+
+            table.cell(dash, 0, 14, "Protected Guard", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 14, sniperProtectedGuardText, text_color = sniperProtectedGuardColor, bgcolor = panelColor, text_size = size.tiny)
+
+            table.cell(dash, 0, 15, "Sniper Sweep", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 15, sniperInternalSweepText, text_color = sniperInternalSweepColor, bgcolor = panelColor, text_size = size.tiny)
+
+            table.cell(dash, 0, 16, "HTF Context", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 16, sniperHTFContextText, text_color = sniperHTFContextColor, bgcolor = panelColor, text_size = size.tiny)
+
+            table.cell(dash, 0, 17, "OTE / HTF", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 17, (dashboardOTE ? "OTE OK" : "OTE ...") + " / " + biasText, text_color = dashboardOTE ? bullColor : neutralColor, bgcolor = panelColor, text_size = size.tiny)
+
+            table.cell(dash, 0, 18, "Objective", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 18, currentObjectiveText, text_color = marketDirectionColor, bgcolor = panelColor, text_size = size.tiny)
+
+            table.cell(dash, 0, 19, "Next Event", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 19, expectedNextEventText, text_color = marketDirectionColor, bgcolor = panelColor, text_size = size.tiny)
+
+            table.cell(dash, 0, 20, "Briefing", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 20, marketBriefingText, text_color = marketDirectionColor, bgcolor = panelColor, text_size = size.small)
+
+            table.cell(dash, 0, 21, "Judas Swing", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 21, ifaJudasDashboardText, text_color = ifaJudasDashboardColor, bgcolor = panelColor, text_size = size.tiny)
+
+            table.cell(dash, 0, 22, "IFA Summary", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 22, ifaFootprintSummaryText, text_color = ifaFootprintSummaryColor, bgcolor = panelColor, text_size = size.tiny)
+
+            table.cell(dash, 0, 23, "IFA Permission", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 23, ifaPermissionDashboardText, text_color = ifaPermissionDashboardColor, bgcolor = panelColor, text_size = size.tiny)
+
+            table.cell(dash, 0, 24, "IFA Decision Gate", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 24, ifaDecisionGateAuditText, text_color = ifaDecisionGateAuditColor, bgcolor = panelColor, text_size = size.tiny)
+
+            table.cell(dash, 0, 25, "IFA Test Note", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 25, ifaDecisionGateTestNoteText, text_color = ifaDecisionGateTestNoteColor, bgcolor = panelColor, text_size = size.tiny)
+
+        else if isTradeManagement
+            table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 IFA PR14", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 0, 1, "TRADE MANAGEMENT", text_color = color.white, bgcolor = color.new(color.black, 0))
+            table.cell(dash, 1, 1, lastPlanDirection, text_color = lastPlanDirection == "LONG" ? bullColor : lastPlanDirection == "SHORT" ? bearColor : neutralColor, bgcolor = color.new(color.black, 0), text_size = size.large)
+
+            table.cell(dash, 0, 2, "Decision", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 2, lastDecision, text_color = decisionColor, bgcolor = panelColor, text_size = size.large)
+
+            table.cell(dash, 0, 3, "Entry / Stop", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 3, dashboardEntryStop, text_color = color.white, bgcolor = panelColor, text_size = size.tiny)
+
+            table.cell(dash, 0, 4, "Target / RR", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 4, dashboardTargetRR, text_color = bullColor, bgcolor = panelColor, text_size = size.tiny)
+
+            table.cell(dash, 0, 5, "Score / Grade", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 5, compactScore, text_color = lastScore >= minimumScore ? bullColor : neutralColor, bgcolor = panelColor)
+
+            table.cell(dash, 0, 6, "Objective", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 6, currentObjectiveText, text_color = marketDirectionColor, bgcolor = panelColor, text_size = size.tiny)
+
+            table.cell(dash, 0, 7, "Next Event", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 7, expectedNextEventText, text_color = marketDirectionColor, bgcolor = panelColor, text_size = size.tiny)
+
+            table.cell(dash, 0, 8, "Briefing", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 8, marketBriefingText, text_color = marketDirectionColor, bgcolor = panelColor, text_size = size.small)
+
+        else if isFull
+            table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 IFA PR14", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+
+            table.cell(dash, 0, 1, "FULL DASHBOARD", text_color = color.white, bgcolor = color.new(color.black, 0))
+            table.cell(dash, 1, 1, "", bgcolor = color.new(color.black, 0))
+
+            table.cell(dash, 0, 2, "Direction", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 2, marketDirectionText, text_color = marketDirectionColor, bgcolor = panelColor)
+
+            table.cell(dash, 0, 3, "Zig Zag", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 3, zigZagDashboardText, text_color = zigZagDashboardColor, bgcolor = panelColor, text_size = size.tiny)
+
+            table.cell(dash, 0, 4, "IFA Gate", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 4, ifaDashboardText, text_color = ifaDashboardColor, bgcolor = panelColor, text_size = size.tiny)
+
+            table.cell(dash, 0, 5, "IFA Quality", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 5, ifaQualityDashboardText, text_color = ifaQualityDashboardColor, bgcolor = panelColor, text_size = size.tiny)
+
+            table.cell(dash, 0, 6, "IFA Imbalance", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 6, ifaImbalanceDashboardText, text_color = ifaImbalanceDashboardColor, bgcolor = panelColor, text_size = size.tiny)
+
+            table.cell(dash, 0, 7, "IFA OB", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 7, ifaOBQualityDashboardText, text_color = ifaOBQualityDashboardColor, bgcolor = panelColor, text_size = size.tiny)
+
+            table.cell(dash, 0, 8, "Narrative", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 8, institutionalNarrativeText, text_color = marketDirectionColor, bgcolor = panelColor)
+
+            table.cell(dash, 0, 9, "Decision", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 9, lastDecision, text_color = decisionColor, bgcolor = panelColor, text_size = size.large)
+
+            table.cell(dash, 0, 10, "Retest", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 10, executionRetestText, text_color = executionRetestText == "No Retest" ? neutralColor : marketDirectionColor, bgcolor = panelColor)
+
+            table.cell(dash, 0, 11, "Execution", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 11, executionStatusText + " / " + executionEntryLockText, text_color = executionStatusText == "Triggered" ? bullColor : executionStatusText == "Stand Down" ? bearColor : neutralColor, bgcolor = panelColor)
+
+            table.cell(dash, 0, 12, "Entry Permission", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 12, executionEntryPermissionText, text_color = executionEntryPermissionColor, bgcolor = panelColor)
+
+            table.cell(dash, 0, 13, "Protected Guard", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 13, sniperProtectedGuardText, text_color = sniperProtectedGuardColor, bgcolor = panelColor, text_size = size.tiny)
+
+            table.cell(dash, 0, 14, "Sniper Sweep", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 14, sniperInternalSweepText, text_color = sniperInternalSweepColor, bgcolor = panelColor, text_size = size.tiny)
+
+            table.cell(dash, 0, 15, "HTF Context", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 15, sniperHTFContextText, text_color = sniperHTFContextColor, bgcolor = panelColor, text_size = size.tiny)
+
+            table.cell(dash, 0, 16, "Objective", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 16, currentObjectiveText, text_color = marketDirectionColor, bgcolor = panelColor, text_size = size.tiny)
+
+            table.cell(dash, 0, 17, "Next Event", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 17, expectedNextEventText, text_color = marketDirectionColor, bgcolor = panelColor, text_size = size.tiny)
+
+            table.cell(dash, 0, 18, "Judas Swing", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 18, ifaJudasDashboardText, text_color = ifaJudasDashboardColor, bgcolor = panelColor, text_size = size.tiny)
+
+            table.cell(dash, 0, 19, "IFA Summary", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 19, ifaFootprintSummaryText, text_color = ifaFootprintSummaryColor, bgcolor = panelColor, text_size = size.tiny)
+
+            table.cell(dash, 0, 20, "IFA Permission", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 20, ifaPermissionDashboardText, text_color = ifaPermissionDashboardColor, bgcolor = panelColor, text_size = size.tiny)
+
+            table.cell(dash, 0, 21, "IFA Decision Gate", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 21, ifaDecisionGateAuditText, text_color = ifaDecisionGateAuditColor, bgcolor = panelColor, text_size = size.tiny)
+
+            table.cell(dash, 0, 22, "IFA Test Note", text_color = neutralColor, bgcolor = panelColor)
+            table.cell(dash, 1, 22, ifaDecisionGateTestNoteText, text_color = ifaDecisionGateTestNoteColor, bgcolor = panelColor, text_size = size.tiny)
 
 //=============================================================================
 // 16. ALERTS
@@ -988,5 +3544,11 @@ alertcondition(bullOBZoneSignal, "ICE Genesis: Bullish highlighted OB zone", "IC
 alertcondition(bearOBZoneSignal, "ICE Genesis: Bearish highlighted OB zone", "ICE Genesis highlighted a bearish order-block zone on {{ticker}} {{interval}}.")
 alertcondition(bullStructureEvent and bullInstitutionalOB, "ICE Genesis: Bullish institutional OB", "ICE Genesis validated a bullish institutional order block on {{ticker}} {{interval}}.")
 alertcondition(bearStructureEvent and bearInstitutionalOB, "ICE Genesis: Bearish institutional OB", "ICE Genesis validated a bearish institutional order block on {{ticker}} {{interval}}.")
-alertcondition(bullQualified, "ICE Genesis: Qualified bullish setup", "ICE Genesis qualified a bullish setup on {{ticker}} {{interval}}.")
-alertcondition(bearQualified, "ICE Genesis: Qualified bearish setup", "ICE Genesis qualified a bearish setup on {{ticker}} {{interval}}.")
+alertcondition(decisionLongSignal, "ICE Genesis: Decision BUY", "ICE Genesis Decision Engine confirmed a BUY setup on {{ticker}} {{interval}}.")
+alertcondition(decisionShortSignal, "ICE Genesis: Decision SELL", "ICE Genesis Decision Engine confirmed a SELL setup on {{ticker}} {{interval}}.")
+alertcondition(executionBullEntryTriggerSignal, "ICE Genesis: Bullish confirmation-break entry trigger", "ICE Genesis Execution Engine confirmed a bullish confirmation-break entry trigger on {{ticker}} {{interval}}.")
+alertcondition(executionBearEntryTriggerSignal, "ICE Genesis: Bearish confirmation-break entry trigger", "ICE Genesis Execution Engine confirmed a bearish confirmation-break entry trigger on {{ticker}} {{interval}}.")
+alertcondition(institutionalBullFootprintPermissionSignal, "ICE Genesis: Bullish IFA permission", "ICE Genesis Institutional Footprint Alignment granted bullish footprint permission on {{ticker}} {{interval}}.")
+alertcondition(institutionalBearFootprintPermissionSignal, "ICE Genesis: Bearish IFA permission", "ICE Genesis Institutional Footprint Alignment granted bearish footprint permission on {{ticker}} {{interval}}.")
+alertcondition(sniperBearProtectedHighSweptNow, "ICE Genesis: Bearish protected high swept", "ICE Genesis Sniper Model detected a bearish protected high sweep / reset on {{ticker}} {{interval}}.")
+alertcondition(sniperBullProtectedLowSweptNow, "ICE Genesis: Bullish protected low swept", "ICE Genesis Sniper Model detected a bullish protected low sweep / reset on {{ticker}} {{interval}}.")
