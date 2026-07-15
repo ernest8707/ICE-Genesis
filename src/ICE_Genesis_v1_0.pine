@@ -1,6 +1,6 @@
 //@version=6
 indicator(
-     "ICE Genesis v1.0 - IFA PR14",
+     "ICE Genesis v1.0 - VAL PR1",
 shorttitle = "ICEGen",     overlay = true,
      max_labels_count = 250,
      max_lines_count = 200,
@@ -38,6 +38,7 @@ groupExecution = "12. Execution Engine"
 groupSniper    = "13. Sniper Model Engine"
 groupZigZag    = "14. Zig Zag Market Structure"
 groupIFA       = "15. Institutional Footprint Alignment"
+groupValidation = "16. Backtesting / Replay Validation"
 showDashboard = input.bool(true, "Show dashboard", group = groupCore)
 dashboardMode = input.string("Execution", "Dashboard mode", options = ["Full", "Morning Brief", "Execution", "Trade Management", "Compact", "Minimal", "Off"], group = groupDashboard)
 enableInstitutionalBias = input.bool(
@@ -526,6 +527,32 @@ requireIFAPermissionForDecision = input.bool(
      group = groupIFA
 )
 
+enableReplayValidation = input.bool(
+     true,
+     "Enable Replay Validation Layer",
+     group = groupValidation
+)
+
+showReplayValidationRows = input.bool(
+     true,
+     "Show replay validation rows",
+     group = groupValidation
+)
+
+validationTrackIFAPermission = input.bool(
+     true,
+     "Track IFA permission in validation",
+     group = groupValidation
+)
+
+validationReviewMemoryBars = input.int(
+     200,
+     "Replay review memory bars",
+     minval = 25,
+     maxval = 1000,
+     group = groupValidation
+)
+
 showSmartTradePanel = input.bool(true, "Show smart trade planner in dashboard", group = groupVisual)
 asiaSession = input.session("1900-0200", "Asia session", group = groupTime)
 londonSession = input.session("0200-0500", "London session", group = groupTime)
@@ -547,9 +574,9 @@ londonShade = color.new(color.rgb(35, 95, 180), 91)
 newYorkShade = color.new(color.rgb(130, 70, 170), 91)
 
 //=============================================================================
-// 2A. CHART READABILITY LABEL TEXT — PR9 / ZIG ZAG PR3 / IFA PR14
+// 2A. CHART READABILITY LABEL TEXT — PR9 / ZIG ZAG PR3 / IFA PR14 / VAL PR1
 // Centralized label text for Full / Short / Minimal chart display modes.
-// IFA PR14 preserves PR13 behavior and completes the final IFA module review pass.
+// VAL PR1 begins the Backtesting / Replay Validation module without changing BUY / SELL logic.
 //=============================================================================
 labelModeFull = chartLabelMode == "Full"
 labelModeShort = chartLabelMode == "Short"
@@ -2631,7 +2658,85 @@ decisionStory = decisionConflict ? decisionMissing :
      decisionDirection == -1 ? "Bearish evidence is developing" : "No directional setup owns the market"
 
 //=============================================================================
-// 13A. MARKET NARRATIVE ENGINE — PR7
+// 13A. BACKTESTING / REPLAY VALIDATION MODULE — PR1
+// Dashboard-only validation layer for replay review.
+// PR1 records the most recent BUY / SELL decision and the condition checklist
+// that existed when the signal fired. It does not change BUY / SELL logic,
+// plots, trade plans, or alerts.
+//=============================================================================
+validationYN(bool condition) =>
+    condition ? "✓" : "—"
+
+validationDecisionSignal = decisionLongSignal or decisionShortSignal
+validationSignalDirection = decisionLongSignal ? 1 : decisionShortSignal ? -1 : 0
+
+validationSignalLiquidity = validationSignalDirection == 1 ? bullLiquidityState :
+     validationSignalDirection == -1 ? bearLiquidityState : false
+
+validationSignalDisplacement = validationSignalDirection == 1 ? bullDisplacementState :
+     validationSignalDirection == -1 ? bearDisplacementState : false
+
+validationSignalStructure = validationSignalDirection == 1 ? bullStructureState :
+     validationSignalDirection == -1 ? bearStructureState : false
+
+validationSignalOB = validationSignalDirection == 1 ? bullOBState :
+     validationSignalDirection == -1 ? bearOBState : false
+
+validationSignalFVG = validationSignalDirection == 1 ? bullFVGState :
+     validationSignalDirection == -1 ? bearFVGState : false
+
+validationSignalOTE = validationSignalDirection == 1 ? bullOTEState :
+     validationSignalDirection == -1 ? bearOTEState : false
+
+validationSignalHTF = validationSignalDirection == 1 ? bullHTFState :
+     validationSignalDirection == -1 ? bearHTFState : false
+
+validationSignalIFAPermission = validationSignalDirection == 1 ? institutionalBullFootprintPermission :
+     validationSignalDirection == -1 ? institutionalBearFootprintPermission : false
+
+var int validationLastDecisionBar = na
+var int validationLastDecisionDirection = 0
+var int validationLastDecisionScore = na
+var string validationLastDecisionText = "No BUY / SELL captured"
+var string validationLastChecklistPrimaryText = "Waiting for replay signal"
+var string validationLastChecklistSecondaryText = "Waiting for replay signal"
+var string validationLastReviewNoteText = "Use replay, screenshot the signal, then mark win/loss manually."
+var color validationLastDecisionColor = neutralColor
+
+if enableReplayValidation and validationDecisionSignal
+    validationLastDecisionBar := bar_index
+    validationLastDecisionDirection := validationSignalDirection
+    validationLastDecisionScore := decisionScore
+    validationLastDecisionText := (validationSignalDirection == 1 ? "BUY" : "SELL") + " " + str.tostring(decisionScore) + "% / " + decisionGrade
+    validationLastChecklistPrimaryText := "LQ " + validationYN(validationSignalLiquidity) + "  DISP " + validationYN(validationSignalDisplacement) + "  STR " + validationYN(validationSignalStructure) + "  OB " + validationYN(validationSignalOB)
+    validationLastChecklistSecondaryText := "FVG " + validationYN(validationSignalFVG) + "  OTE " + validationYN(validationSignalOTE) + "  HTF " + validationYN(validationSignalHTF) + "  IFA " + (validationTrackIFAPermission ? validationYN(validationSignalIFAPermission) : "Off")
+    validationLastReviewNoteText := validationSignalDirection == 1 ? "Replay BUY: review entry, stop, target, and follow-through." : "Replay SELL: review entry, stop, target, and follow-through."
+    validationLastDecisionColor := validationSignalDirection == 1 ? bullColor : bearColor
+
+validationLastDecisionFresh = enableReplayValidation and not na(validationLastDecisionBar) and
+     bar_index - validationLastDecisionBar <= validationReviewMemoryBars
+
+validationLastDecisionAgeText = not enableReplayValidation ? "Off" :
+     na(validationLastDecisionBar) ? "No signal yet" :
+     str.tostring(bar_index - validationLastDecisionBar) + " bars ago"
+
+validationModeDashboardText = not enableReplayValidation ? "Off" :
+     validationLastDecisionFresh ? "Replay Review Active" :
+     na(validationLastDecisionBar) ? "Waiting for BUY / SELL" : "Last signal outside memory"
+
+validationModeDashboardColor = not enableReplayValidation ? neutralColor :
+     validationLastDecisionFresh ? bullColor :
+     na(validationLastDecisionBar) ? neutralColor : liqColor
+
+validationDecisionDashboardText = not enableReplayValidation ? "Off" :
+     validationLastDecisionText + " / " + validationLastDecisionAgeText
+
+validationDecisionDashboardColor = not enableReplayValidation ? neutralColor :
+     validationLastDecisionFresh ? validationLastDecisionColor :
+     na(validationLastDecisionBar) ? neutralColor : liqColor
+
+//=============================================================================
+// 13B. MARKET NARRATIVE ENGINE — PR7
 // PR7 adds dashboard focus modes without changing BUY / SELL logic.
 // PR5 improves dashboard briefing readability without changing BUY / SELL logic.
 //=============================================================================
@@ -2724,7 +2829,7 @@ marketBriefingText = decisionLongReady ? "BUY active. Manage plan. Avoid shorts.
      "No clean story. Wait."
 
 //=============================================================================
-// 13B. EXECUTION ENGINE — PR7
+// 13C. EXECUTION ENGINE — PR7
 // Tracks retests, confirmation candles, confirmation-candle break triggers,
 // entry-trigger locks, and de-duplicated visual markers without changing BUY / SELL logic.
 // Plot-count fix: debug data-window plots are disabled so the script stays under TradingView's 64-plot limit.
@@ -2776,7 +2881,7 @@ executionRetestText = executionDirectionalOBRetest and executionDirectionalFVGRe
      executionDirectionalFVGRetest ? "FVG Retest" : "No Retest"
 
 //=============================================================================
-// 13C. SNIPER MODEL ENGINE PR2 / PR3 — INTERNAL LIQUIDITY SWEEP VALIDATION
+// 13D. SNIPER MODEL ENGINE PR2 / PR3 — INTERNAL LIQUIDITY SWEEP VALIDATION
 // Validates the internal liquidity sweep that occurs during the pullback into
 // the active order block / FVG, while keeping protected-level invalidation separate.
 // Bearish: internal BSL sweep during pullback is valid; protected high sweep invalidates.
@@ -2865,7 +2970,7 @@ sniperInternalSweepColor = str.contains(sniperInternalSweepText, "reset") ? bear
      str.contains(sniperInternalSweepText, "Need") ? liqColor : neutralColor
 
 //=============================================================================
-// 13D. SNIPER MODEL ENGINE PR3 — HTF LIQUIDITY ZONE CONTEXT
+// 13E. SNIPER MODEL ENGINE PR3 — HTF LIQUIDITY ZONE CONTEXT
 // Higher timeframe finds the battlefield; lower timeframe finds the sniper entry.
 // This classifies the active parent zone as bullish demand, bearish supply, or waiting,
 // then pairs that zone with the expected liquidity side.
@@ -3325,7 +3430,7 @@ if barstate.islast
 
         if isMorningBrief
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 IFA PR14", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 VAL PR1", text_color = color.white, bgcolor = panelColor, text_size = size.small)
             table.cell(dash, 0, 1, "MORNING BRIEF", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 1, "", bgcolor = color.new(color.black, 0))
 
@@ -3358,7 +3463,7 @@ if barstate.islast
 
         else if isExecutionFocus
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 IFA PR14", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 VAL PR1", text_color = color.white, bgcolor = panelColor, text_size = size.small)
             table.cell(dash, 0, 1, "EXECUTION FOCUS", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 1, lastDecision, text_color = decisionColor, bgcolor = color.new(color.black, 0), text_size = size.large)
 
@@ -3434,9 +3539,22 @@ if barstate.islast
             table.cell(dash, 0, 25, "IFA Test Note", text_color = neutralColor, bgcolor = panelColor)
             table.cell(dash, 1, 25, ifaDecisionGateTestNoteText, text_color = ifaDecisionGateTestNoteColor, bgcolor = panelColor, text_size = size.tiny)
 
+            if showReplayValidationRows
+                table.cell(dash, 0, 26, "Replay Mode", text_color = neutralColor, bgcolor = panelColor)
+                table.cell(dash, 1, 26, validationModeDashboardText, text_color = validationModeDashboardColor, bgcolor = panelColor, text_size = size.tiny)
+
+                table.cell(dash, 0, 27, "Replay Signal", text_color = neutralColor, bgcolor = panelColor)
+                table.cell(dash, 1, 27, validationDecisionDashboardText, text_color = validationDecisionDashboardColor, bgcolor = panelColor, text_size = size.tiny)
+
+                table.cell(dash, 0, 28, "Replay Checklist", text_color = neutralColor, bgcolor = panelColor)
+                table.cell(dash, 1, 28, validationLastChecklistPrimaryText, text_color = validationDecisionDashboardColor, bgcolor = panelColor, text_size = size.tiny)
+
+                table.cell(dash, 0, 29, "Replay Extras", text_color = neutralColor, bgcolor = panelColor)
+                table.cell(dash, 1, 29, validationLastChecklistSecondaryText, text_color = validationDecisionDashboardColor, bgcolor = panelColor, text_size = size.tiny)
+
         else if isTradeManagement
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 IFA PR14", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 VAL PR1", text_color = color.white, bgcolor = panelColor, text_size = size.small)
             table.cell(dash, 0, 1, "TRADE MANAGEMENT", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 1, lastPlanDirection, text_color = lastPlanDirection == "LONG" ? bullColor : lastPlanDirection == "SHORT" ? bearColor : neutralColor, bgcolor = color.new(color.black, 0), text_size = size.large)
 
@@ -3463,7 +3581,7 @@ if barstate.islast
 
         else if isFull
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 IFA PR14", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 VAL PR1", text_color = color.white, bgcolor = panelColor, text_size = size.small)
 
             table.cell(dash, 0, 1, "FULL DASHBOARD", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 1, "", bgcolor = color.new(color.black, 0))
@@ -3530,6 +3648,19 @@ if barstate.islast
 
             table.cell(dash, 0, 22, "IFA Test Note", text_color = neutralColor, bgcolor = panelColor)
             table.cell(dash, 1, 22, ifaDecisionGateTestNoteText, text_color = ifaDecisionGateTestNoteColor, bgcolor = panelColor, text_size = size.tiny)
+
+            if showReplayValidationRows
+                table.cell(dash, 0, 23, "Replay Mode", text_color = neutralColor, bgcolor = panelColor)
+                table.cell(dash, 1, 23, validationModeDashboardText, text_color = validationModeDashboardColor, bgcolor = panelColor, text_size = size.tiny)
+
+                table.cell(dash, 0, 24, "Replay Signal", text_color = neutralColor, bgcolor = panelColor)
+                table.cell(dash, 1, 24, validationDecisionDashboardText, text_color = validationDecisionDashboardColor, bgcolor = panelColor, text_size = size.tiny)
+
+                table.cell(dash, 0, 25, "Replay Checklist", text_color = neutralColor, bgcolor = panelColor)
+                table.cell(dash, 1, 25, validationLastChecklistPrimaryText, text_color = validationDecisionDashboardColor, bgcolor = panelColor, text_size = size.tiny)
+
+                table.cell(dash, 0, 26, "Replay Extras", text_color = neutralColor, bgcolor = panelColor)
+                table.cell(dash, 1, 26, validationLastChecklistSecondaryText, text_color = validationDecisionDashboardColor, bgcolor = panelColor, text_size = size.tiny)
 
 //=============================================================================
 // 16. ALERTS
