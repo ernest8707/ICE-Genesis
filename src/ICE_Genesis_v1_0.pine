@@ -1,6 +1,6 @@
 //@version=6
 indicator(
-     "ICE Genesis v1.0 - VAL PR2",
+     "ICE Genesis v1.0 - VAL PR3 FIX1",
 shorttitle = "ICEGen",     overlay = true,
      max_labels_count = 250,
      max_lines_count = 200,
@@ -581,11 +581,13 @@ londonShade = color.new(color.rgb(35, 95, 180), 91)
 newYorkShade = color.new(color.rgb(130, 70, 170), 91)
 
 //=============================================================================
-// 2A. CHART READABILITY LABEL TEXT — PR9 / ZIG ZAG PR3 / IFA PR14 / VAL PR2
+// 2A. CHART READABILITY LABEL TEXT — PR9 / ZIG ZAG PR3 / IFA PR14 / VAL PR3
 // Centralized label text for Full / Short / Minimal chart display modes.
 // VAL PR1 begins the Backtesting / Replay Validation module without changing BUY / SELL logic.
 // VAL PR1 FIX1 adds a dedicated Replay Validation dashboard mode so validation rows remain visible on smaller screens.
 // VAL PR2 adds selectable replay dashboard pages as a practical pagination substitute for table scrolling.
+// VAL PR3 freezes signal-time setup conditions so later bars cannot rewrite the saved replay snapshot.
+// VAL PR3 FIX1 moves snapshot capture and display formatting into functions to resolve CE10295 without changing behavior.
 //=============================================================================
 labelModeFull = chartLabelMode == "Full"
 labelModeShort = chartLabelMode == "Short"
@@ -2667,83 +2669,134 @@ decisionStory = decisionConflict ? decisionMissing :
      decisionDirection == -1 ? "Bearish evidence is developing" : "No directional setup owns the market"
 
 //=============================================================================
-// 13A. BACKTESTING / REPLAY VALIDATION MODULE — PR1 / PR2
+// 13A. BACKTESTING / REPLAY VALIDATION MODULE — PR1 / PR2 / PR3
 // Dashboard-only validation layer for replay review.
 // PR1 records the most recent BUY / SELL decision and the condition checklist
 // that existed when the signal fired.
 // PR2 adds selectable replay dashboard pages so all validation details remain
 // readable without changing BUY / SELL logic, plots, trade plans, or alerts.
+// PR3 stores each signal-time condition as an individual snapshot field.
+// Saved values update only when a new BUY / SELL signal fires, so later market
+// changes cannot rewrite the recorded replay checklist.
 //=============================================================================
 validationYN(bool condition) =>
     condition ? "✓" : "—"
 
-validationDecisionSignal = decisionLongSignal or decisionShortSignal
-validationSignalDirection = decisionLongSignal ? 1 : decisionShortSignal ? -1 : 0
+// VAL PR3 FIX1 — Function-wrapped signal snapshot memory.
+// Moving this state machine out of the script's main body resolves TradingView
+// CE10295 while preserving the exact PR3 snapshot behavior.
+validationCaptureSnapshot(
+     bool enabled,
+     bool longSignal,
+     bool shortSignal,
+     int score,
+     string grade,
+     bool bullLiquidity,
+     bool bearLiquidity,
+     bool bullDisplacement,
+     bool bearDisplacement,
+     bool bullStructure,
+     bool bearStructure,
+     bool bullOB,
+     bool bearOB,
+     bool bullFVG,
+     bool bearFVG,
+     bool bullOTE,
+     bool bearOTE,
+     bool bullHTF,
+     bool bearHTF,
+     bool bullIFA,
+     bool bearIFA,
+     bool trackIFA,
+     color longColor,
+     color shortColor) =>
+    bool decisionSignal = longSignal or shortSignal
+    int signalDirection = longSignal ? 1 : shortSignal ? -1 : 0
+    bool signalLiquidity = signalDirection == 1 ? bullLiquidity : signalDirection == -1 ? bearLiquidity : false
+    bool signalDisplacement = signalDirection == 1 ? bullDisplacement : signalDirection == -1 ? bearDisplacement : false
+    bool signalStructure = signalDirection == 1 ? bullStructure : signalDirection == -1 ? bearStructure : false
+    bool signalOB = signalDirection == 1 ? bullOB : signalDirection == -1 ? bearOB : false
+    bool signalFVG = signalDirection == 1 ? bullFVG : signalDirection == -1 ? bearFVG : false
+    bool signalOTE = signalDirection == 1 ? bullOTE : signalDirection == -1 ? bearOTE : false
+    bool signalHTF = signalDirection == 1 ? bullHTF : signalDirection == -1 ? bearHTF : false
+    bool signalIFA = signalDirection == 1 ? bullIFA : signalDirection == -1 ? bearIFA : false
 
-validationSignalLiquidity = validationSignalDirection == 1 ? bullLiquidityState :
-     validationSignalDirection == -1 ? bearLiquidityState : false
+    var bool captured = false
+    var int lastBar = na
+    var int lastDirection = 0
+    var int lastScore = na
+    var string lastGrade = "—"
+    var bool lastLiquidity = false
+    var bool lastDisplacement = false
+    var bool lastStructure = false
+    var bool lastOB = false
+    var bool lastFVG = false
+    var bool lastOTE = false
+    var bool lastHTF = false
+    var bool lastIFA = false
+    var bool lastIFATracking = false
+    var string lastDecisionText = "No BUY / SELL captured"
+    var string lastChecklistPrimary = "Waiting for replay signal"
+    var string lastChecklistSecondary = "Waiting for replay signal"
+    var string lastReviewNote = "Use replay, screenshot the signal, then mark win/loss manually."
+    var color lastDecisionColor = color.gray
 
-validationSignalDisplacement = validationSignalDirection == 1 ? bullDisplacementState :
-     validationSignalDirection == -1 ? bearDisplacementState : false
+    if enabled and decisionSignal
+        captured := true
+        lastBar := bar_index
+        lastDirection := signalDirection
+        lastScore := score
+        lastGrade := grade
+        lastLiquidity := signalLiquidity
+        lastDisplacement := signalDisplacement
+        lastStructure := signalStructure
+        lastOB := signalOB
+        lastFVG := signalFVG
+        lastOTE := signalOTE
+        lastHTF := signalHTF
+        lastIFA := signalIFA
+        lastIFATracking := trackIFA
+        lastDecisionText := (signalDirection == 1 ? "BUY" : "SELL") + " " + str.tostring(score) + "% / " + grade
+        lastChecklistPrimary := "LQ " + validationYN(signalLiquidity) + "  DISP " + validationYN(signalDisplacement) + "  STR " + validationYN(signalStructure) + "  OB " + validationYN(signalOB)
+        lastChecklistSecondary := "FVG " + validationYN(signalFVG) + "  OTE " + validationYN(signalOTE) + "  HTF " + validationYN(signalHTF) + "  IFA " + (trackIFA ? validationYN(signalIFA) : "Off")
+        lastReviewNote := signalDirection == 1 ? "Saved BUY snapshot. Review entry, stop, target, and follow-through." : "Saved SELL snapshot. Review entry, stop, target, and follow-through."
+        lastDecisionColor := signalDirection == 1 ? longColor : shortColor
 
-validationSignalStructure = validationSignalDirection == 1 ? bullStructureState :
-     validationSignalDirection == -1 ? bearStructureState : false
+    [captured, lastBar, lastDirection, lastScore, lastGrade, lastLiquidity, lastDisplacement, lastStructure, lastOB, lastFVG, lastOTE, lastHTF, lastIFA, lastIFATracking, lastDecisionText, lastChecklistPrimary, lastChecklistSecondary, lastReviewNote, lastDecisionColor]
 
-validationSignalOB = validationSignalDirection == 1 ? bullOBState :
-     validationSignalDirection == -1 ? bearOBState : false
+validationFormatSnapshot(
+     bool enabled,
+     bool captured,
+     int lastBar,
+     int lastDirection,
+     int lastScore,
+     string lastGrade,
+     bool lastIFA,
+     bool lastIFATracking,
+     string lastDecisionText,
+     color lastDecisionColor,
+     int memoryBars,
+     color bullDisplayColor,
+     color neutralDisplayColor,
+     color warningDisplayColor) =>
+    bool fresh = enabled and captured and not na(lastBar) and bar_index - lastBar <= memoryBars
+    string ageText = not enabled ? "Off" : not captured or na(lastBar) ? "No signal yet" : str.tostring(bar_index - lastBar) + " bars ago"
+    string modeText = not enabled ? "Off" : fresh ? "Replay Review Active" : not captured ? "Waiting for BUY / SELL" : "Last signal outside memory"
+    color modeColor = not enabled ? neutralDisplayColor : fresh ? bullDisplayColor : not captured ? neutralDisplayColor : warningDisplayColor
+    string decisionText = not enabled ? "Off" : lastDecisionText + " / " + ageText
+    color decisionColor = not enabled ? neutralDisplayColor : fresh ? lastDecisionColor : not captured ? neutralDisplayColor : warningDisplayColor
+    string statusText = not enabled ? "Replay layer OFF" : not captured ? "Waiting for signal snapshot" : fresh ? "Snapshot Locked ✓" : "Snapshot Locked — Outside Memory"
+    color statusColor = not enabled ? neutralDisplayColor : not captured ? neutralDisplayColor : fresh ? bullDisplayColor : warningDisplayColor
+    string directionText = not captured ? "—" : lastDirection == 1 ? "BUY Snapshot" : lastDirection == -1 ? "SELL Snapshot" : "—"
+    string scoreGradeText = not captured or na(lastScore) ? "—" : str.tostring(lastScore) + "% / " + lastGrade
+    string barAgeText = not captured or na(lastBar) ? "—" : "Bar " + str.tostring(lastBar) + " / " + ageText
+    string ifaText = not captured ? "—" : not lastIFATracking ? "Not tracked at signal" : lastIFA ? "IFA Permission ✓" : "IFA Permission —"
+    color ifaColor = not captured or not lastIFATracking ? neutralDisplayColor : lastIFA ? bullDisplayColor : warningDisplayColor
+    [fresh, ageText, modeText, modeColor, decisionText, decisionColor, statusText, statusColor, directionText, scoreGradeText, barAgeText, ifaText, ifaColor]
 
-validationSignalFVG = validationSignalDirection == 1 ? bullFVGState :
-     validationSignalDirection == -1 ? bearFVGState : false
+[validationSnapshotCaptured, validationLastDecisionBar, validationLastDecisionDirection, validationLastDecisionScore, validationLastDecisionGrade, validationLastSignalLiquidity, validationLastSignalDisplacement, validationLastSignalStructure, validationLastSignalOB, validationLastSignalFVG, validationLastSignalOTE, validationLastSignalHTF, validationLastSignalIFAPermission, validationLastIFATrackingEnabled, validationLastDecisionText, validationLastChecklistPrimaryText, validationLastChecklistSecondaryText, validationLastReviewNoteText, validationLastDecisionColor] = validationCaptureSnapshot(enableReplayValidation, decisionLongSignal, decisionShortSignal, decisionScore, decisionGrade, bullLiquidityState, bearLiquidityState, bullDisplacementState, bearDisplacementState, bullStructureState, bearStructureState, bullOBState, bearOBState, bullFVGState, bearFVGState, bullOTEState, bearOTEState, bullHTFState, bearHTFState, institutionalBullFootprintPermission, institutionalBearFootprintPermission, validationTrackIFAPermission, bullColor, bearColor)
 
-validationSignalOTE = validationSignalDirection == 1 ? bullOTEState :
-     validationSignalDirection == -1 ? bearOTEState : false
-
-validationSignalHTF = validationSignalDirection == 1 ? bullHTFState :
-     validationSignalDirection == -1 ? bearHTFState : false
-
-validationSignalIFAPermission = validationSignalDirection == 1 ? institutionalBullFootprintPermission :
-     validationSignalDirection == -1 ? institutionalBearFootprintPermission : false
-
-var int validationLastDecisionBar = na
-var int validationLastDecisionDirection = 0
-var int validationLastDecisionScore = na
-var string validationLastDecisionText = "No BUY / SELL captured"
-var string validationLastChecklistPrimaryText = "Waiting for replay signal"
-var string validationLastChecklistSecondaryText = "Waiting for replay signal"
-var string validationLastReviewNoteText = "Use replay, screenshot the signal, then mark win/loss manually."
-var color validationLastDecisionColor = neutralColor
-
-if enableReplayValidation and validationDecisionSignal
-    validationLastDecisionBar := bar_index
-    validationLastDecisionDirection := validationSignalDirection
-    validationLastDecisionScore := decisionScore
-    validationLastDecisionText := (validationSignalDirection == 1 ? "BUY" : "SELL") + " " + str.tostring(decisionScore) + "% / " + decisionGrade
-    validationLastChecklistPrimaryText := "LQ " + validationYN(validationSignalLiquidity) + "  DISP " + validationYN(validationSignalDisplacement) + "  STR " + validationYN(validationSignalStructure) + "  OB " + validationYN(validationSignalOB)
-    validationLastChecklistSecondaryText := "FVG " + validationYN(validationSignalFVG) + "  OTE " + validationYN(validationSignalOTE) + "  HTF " + validationYN(validationSignalHTF) + "  IFA " + (validationTrackIFAPermission ? validationYN(validationSignalIFAPermission) : "Off")
-    validationLastReviewNoteText := validationSignalDirection == 1 ? "Replay BUY: review entry, stop, target, and follow-through." : "Replay SELL: review entry, stop, target, and follow-through."
-    validationLastDecisionColor := validationSignalDirection == 1 ? bullColor : bearColor
-
-validationLastDecisionFresh = enableReplayValidation and not na(validationLastDecisionBar) and
-     bar_index - validationLastDecisionBar <= validationReviewMemoryBars
-
-validationLastDecisionAgeText = not enableReplayValidation ? "Off" :
-     na(validationLastDecisionBar) ? "No signal yet" :
-     str.tostring(bar_index - validationLastDecisionBar) + " bars ago"
-
-validationModeDashboardText = not enableReplayValidation ? "Off" :
-     validationLastDecisionFresh ? "Replay Review Active" :
-     na(validationLastDecisionBar) ? "Waiting for BUY / SELL" : "Last signal outside memory"
-
-validationModeDashboardColor = not enableReplayValidation ? neutralColor :
-     validationLastDecisionFresh ? bullColor :
-     na(validationLastDecisionBar) ? neutralColor : liqColor
-
-validationDecisionDashboardText = not enableReplayValidation ? "Off" :
-     validationLastDecisionText + " / " + validationLastDecisionAgeText
-
-validationDecisionDashboardColor = not enableReplayValidation ? neutralColor :
-     validationLastDecisionFresh ? validationLastDecisionColor :
-     na(validationLastDecisionBar) ? neutralColor : liqColor
+[validationLastDecisionFresh, validationLastDecisionAgeText, validationModeDashboardText, validationModeDashboardColor, validationDecisionDashboardText, validationDecisionDashboardColor, validationSnapshotStatusText, validationSnapshotStatusColor, validationSnapshotDirectionText, validationSnapshotScoreGradeText, validationSnapshotBarAgeText, validationSnapshotIFAText, validationSnapshotIFAColor] = validationFormatSnapshot(enableReplayValidation, validationSnapshotCaptured, validationLastDecisionBar, validationLastDecisionDirection, validationLastDecisionScore, validationLastDecisionGrade, validationLastSignalIFAPermission, validationLastIFATrackingEnabled, validationLastDecisionText, validationLastDecisionColor, validationReviewMemoryBars, bullColor, neutralColor, liqColor)
 
 //=============================================================================
 // 13B. MARKET NARRATIVE ENGINE — PR7
@@ -3446,7 +3499,7 @@ if barstate.islast
             string replayPageTitle = replayPageCurrentSetup ? "PAGE 1 — CURRENT SETUP" : replayPageChecklist ? "PAGE 2 — REPLAY CHECKLIST" : "PAGE 3 — IFA + EXECUTION"
 
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 VAL PR2", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 VAL PR3 FIX1", text_color = color.white, bgcolor = panelColor, text_size = size.small)
             table.cell(dash, 0, 1, replayPageTitle, text_color = color.white, bgcolor = color.new(color.black, 0), text_size = size.small)
             table.cell(dash, 1, 1, validationModeDashboardText, text_color = validationModeDashboardColor, bgcolor = color.new(color.black, 0), text_size = size.small)
 
@@ -3469,42 +3522,54 @@ if barstate.islast
                 table.cell(dash, 0, 7, "OB / FVG", text_color = neutralColor, bgcolor = panelColor)
                 table.cell(dash, 1, 7, (obActive ? zoneText : "OB ...") + " / " + (fvgActive ? fvgText : "FVG ..."), text_color = obActive ? (activeBullish ? bullColor : bearColor) : neutralColor, bgcolor = panelColor, text_size = size.tiny)
 
-                table.cell(dash, 0, 8, "Replay Signal", text_color = neutralColor, bgcolor = panelColor)
+                table.cell(dash, 0, 8, "Saved Signal", text_color = neutralColor, bgcolor = panelColor)
                 table.cell(dash, 1, 8, validationDecisionDashboardText, text_color = validationDecisionDashboardColor, bgcolor = panelColor, text_size = size.tiny)
 
-                table.cell(dash, 0, 9, "Objective", text_color = neutralColor, bgcolor = panelColor)
-                table.cell(dash, 1, 9, currentObjectiveText, text_color = marketDirectionColor, bgcolor = panelColor, text_size = size.tiny)
+                table.cell(dash, 0, 9, "Snapshot Status", text_color = neutralColor, bgcolor = panelColor)
+                table.cell(dash, 1, 9, validationSnapshotStatusText, text_color = validationSnapshotStatusColor, bgcolor = panelColor, text_size = size.tiny)
 
-                table.cell(dash, 0, 10, "Next Step", text_color = neutralColor, bgcolor = panelColor)
-                table.cell(dash, 1, 10, decisionNextStep, text_color = marketDirectionColor, bgcolor = panelColor, text_size = size.tiny)
+                table.cell(dash, 0, 10, "Signal Bar / Age", text_color = neutralColor, bgcolor = panelColor)
+                table.cell(dash, 1, 10, validationSnapshotBarAgeText, text_color = validationDecisionDashboardColor, bgcolor = panelColor, text_size = size.tiny)
+
+                table.cell(dash, 0, 11, "Objective", text_color = neutralColor, bgcolor = panelColor)
+                table.cell(dash, 1, 11, currentObjectiveText, text_color = marketDirectionColor, bgcolor = panelColor, text_size = size.tiny)
+
+                table.cell(dash, 0, 12, "Next Step", text_color = neutralColor, bgcolor = panelColor)
+                table.cell(dash, 1, 12, decisionNextStep, text_color = marketDirectionColor, bgcolor = panelColor, text_size = size.tiny)
 
             else if replayPageChecklist
-                table.cell(dash, 0, 2, "Replay Signal", text_color = neutralColor, bgcolor = panelColor)
+                table.cell(dash, 0, 2, "Saved Signal", text_color = neutralColor, bgcolor = panelColor)
                 table.cell(dash, 1, 2, validationDecisionDashboardText, text_color = validationDecisionDashboardColor, bgcolor = panelColor, text_size = size.small)
 
-                table.cell(dash, 0, 3, "Checklist 1", text_color = neutralColor, bgcolor = panelColor)
-                table.cell(dash, 1, 3, validationLastChecklistPrimaryText, text_color = validationDecisionDashboardColor, bgcolor = panelColor, text_size = size.tiny)
+                table.cell(dash, 0, 3, "Snapshot Status", text_color = neutralColor, bgcolor = panelColor)
+                table.cell(dash, 1, 3, validationSnapshotStatusText, text_color = validationSnapshotStatusColor, bgcolor = panelColor, text_size = size.tiny)
 
-                table.cell(dash, 0, 4, "Checklist 2", text_color = neutralColor, bgcolor = panelColor)
-                table.cell(dash, 1, 4, validationLastChecklistSecondaryText, text_color = validationDecisionDashboardColor, bgcolor = panelColor, text_size = size.tiny)
+                table.cell(dash, 0, 4, "Signal Direction", text_color = neutralColor, bgcolor = panelColor)
+                table.cell(dash, 1, 4, validationSnapshotDirectionText, text_color = validationDecisionDashboardColor, bgcolor = panelColor)
 
-                table.cell(dash, 0, 5, "Review Note", text_color = neutralColor, bgcolor = panelColor)
-                table.cell(dash, 1, 5, validationLastReviewNoteText, text_color = validationDecisionDashboardColor, bgcolor = panelColor, text_size = size.tiny)
+                table.cell(dash, 0, 5, "Score / Grade", text_color = neutralColor, bgcolor = panelColor)
+                table.cell(dash, 1, 5, validationSnapshotScoreGradeText, text_color = validationDecisionDashboardColor, bgcolor = panelColor)
 
-                table.cell(dash, 0, 6, "Current Decision", text_color = neutralColor, bgcolor = panelColor)
-                table.cell(dash, 1, 6, lastDecision, text_color = decisionColor, bgcolor = panelColor)
+                table.cell(dash, 0, 6, "Signal Bar / Age", text_color = neutralColor, bgcolor = panelColor)
+                table.cell(dash, 1, 6, validationSnapshotBarAgeText, text_color = validationDecisionDashboardColor, bgcolor = panelColor, text_size = size.tiny)
 
-                table.cell(dash, 0, 7, "Current Score", text_color = neutralColor, bgcolor = panelColor)
-                table.cell(dash, 1, 7, compactScore, text_color = lastScore >= minimumScore ? bullColor : neutralColor, bgcolor = panelColor)
+                table.cell(dash, 0, 7, "Checklist 1", text_color = neutralColor, bgcolor = panelColor)
+                table.cell(dash, 1, 7, validationLastChecklistPrimaryText, text_color = validationDecisionDashboardColor, bgcolor = panelColor, text_size = size.tiny)
 
-                table.cell(dash, 0, 8, "IFA Tracking", text_color = neutralColor, bgcolor = panelColor)
-                table.cell(dash, 1, 8, validationTrackIFAPermission ? "Included in checklist" : "Excluded from checklist", text_color = validationTrackIFAPermission ? bullColor : neutralColor, bgcolor = panelColor, text_size = size.tiny)
+                table.cell(dash, 0, 8, "Checklist 2", text_color = neutralColor, bgcolor = panelColor)
+                table.cell(dash, 1, 8, validationLastChecklistSecondaryText, text_color = validationDecisionDashboardColor, bgcolor = panelColor, text_size = size.tiny)
 
-                table.cell(dash, 0, 9, "Memory Window", text_color = neutralColor, bgcolor = panelColor)
-                table.cell(dash, 1, 9, str.tostring(validationReviewMemoryBars) + " bars", text_color = neutralColor, bgcolor = panelColor)
+                table.cell(dash, 0, 9, "IFA Snapshot", text_color = neutralColor, bgcolor = panelColor)
+                table.cell(dash, 1, 9, validationSnapshotIFAText, text_color = validationSnapshotIFAColor, bgcolor = panelColor, text_size = size.tiny)
 
-                table.cell(dash, 0, 10, "Next Step", text_color = neutralColor, bgcolor = panelColor)
-                table.cell(dash, 1, 10, decisionNextStep, text_color = marketDirectionColor, bgcolor = panelColor, text_size = size.tiny)
+                table.cell(dash, 0, 10, "Review Note", text_color = neutralColor, bgcolor = panelColor)
+                table.cell(dash, 1, 10, validationLastReviewNoteText, text_color = validationDecisionDashboardColor, bgcolor = panelColor, text_size = size.tiny)
+
+                table.cell(dash, 0, 11, "Current Decision", text_color = neutralColor, bgcolor = panelColor)
+                table.cell(dash, 1, 11, lastDecision, text_color = decisionColor, bgcolor = panelColor)
+
+                table.cell(dash, 0, 12, "Next Step", text_color = neutralColor, bgcolor = panelColor)
+                table.cell(dash, 1, 12, decisionNextStep, text_color = marketDirectionColor, bgcolor = panelColor, text_size = size.tiny)
 
             else if replayPageIFAExecution
                 table.cell(dash, 0, 2, "IFA Gate", text_color = neutralColor, bgcolor = panelColor)
@@ -3540,9 +3605,15 @@ if barstate.islast
                 table.cell(dash, 0, 12, "Sniper Sweep", text_color = neutralColor, bgcolor = panelColor)
                 table.cell(dash, 1, 12, sniperInternalSweepText, text_color = sniperInternalSweepColor, bgcolor = panelColor, text_size = size.tiny)
 
+                table.cell(dash, 0, 13, "Saved Signal", text_color = neutralColor, bgcolor = panelColor)
+                table.cell(dash, 1, 13, validationDecisionDashboardText, text_color = validationDecisionDashboardColor, bgcolor = panelColor, text_size = size.tiny)
+
+                table.cell(dash, 0, 14, "Saved IFA", text_color = neutralColor, bgcolor = panelColor)
+                table.cell(dash, 1, 14, validationSnapshotIFAText, text_color = validationSnapshotIFAColor, bgcolor = panelColor, text_size = size.tiny)
+
         else if isMorningBrief
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 VAL PR2", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 VAL PR3 FIX1", text_color = color.white, bgcolor = panelColor, text_size = size.small)
             table.cell(dash, 0, 1, "MORNING BRIEF", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 1, "", bgcolor = color.new(color.black, 0))
 
@@ -3575,7 +3646,7 @@ if barstate.islast
 
         else if isExecutionFocus
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 VAL PR2", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 VAL PR3 FIX1", text_color = color.white, bgcolor = panelColor, text_size = size.small)
             table.cell(dash, 0, 1, "EXECUTION FOCUS", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 1, lastDecision, text_color = decisionColor, bgcolor = color.new(color.black, 0), text_size = size.large)
 
@@ -3666,7 +3737,7 @@ if barstate.islast
 
         else if isTradeManagement
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 VAL PR2", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 VAL PR3 FIX1", text_color = color.white, bgcolor = panelColor, text_size = size.small)
             table.cell(dash, 0, 1, "TRADE MANAGEMENT", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 1, lastPlanDirection, text_color = lastPlanDirection == "LONG" ? bullColor : lastPlanDirection == "SHORT" ? bearColor : neutralColor, bgcolor = color.new(color.black, 0), text_size = size.large)
 
@@ -3693,7 +3764,7 @@ if barstate.islast
 
         else if isFull
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 VAL PR2", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 VAL PR3 FIX1", text_color = color.white, bgcolor = panelColor, text_size = size.small)
 
             table.cell(dash, 0, 1, "FULL DASHBOARD", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 1, "", bgcolor = color.new(color.black, 0))
