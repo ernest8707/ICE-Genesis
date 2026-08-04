@@ -1,6 +1,6 @@
 //@version=6
 indicator(
-     "ICE Genesis v1.0 - VAL PR1 FIX1",
+     "ICE Genesis v1.0 - VAL PR2",
 shorttitle = "ICEGen",     overlay = true,
      max_labels_count = 250,
      max_lines_count = 200,
@@ -539,6 +539,13 @@ showReplayValidationRows = input.bool(
      group = groupValidation
 )
 
+replayDashboardPage = input.string(
+     "Current Setup",
+     "Replay Dashboard Page",
+     options = ["Current Setup", "Replay Checklist", "IFA + Execution"],
+     group = groupValidation
+)
+
 validationTrackIFAPermission = input.bool(
      true,
      "Track IFA permission in validation",
@@ -574,10 +581,11 @@ londonShade = color.new(color.rgb(35, 95, 180), 91)
 newYorkShade = color.new(color.rgb(130, 70, 170), 91)
 
 //=============================================================================
-// 2A. CHART READABILITY LABEL TEXT — PR9 / ZIG ZAG PR3 / IFA PR14 / VAL PR1
+// 2A. CHART READABILITY LABEL TEXT — PR9 / ZIG ZAG PR3 / IFA PR14 / VAL PR2
 // Centralized label text for Full / Short / Minimal chart display modes.
 // VAL PR1 begins the Backtesting / Replay Validation module without changing BUY / SELL logic.
 // VAL PR1 FIX1 adds a dedicated Replay Validation dashboard mode so validation rows remain visible on smaller screens.
+// VAL PR2 adds selectable replay dashboard pages as a practical pagination substitute for table scrolling.
 //=============================================================================
 labelModeFull = chartLabelMode == "Full"
 labelModeShort = chartLabelMode == "Short"
@@ -2659,11 +2667,12 @@ decisionStory = decisionConflict ? decisionMissing :
      decisionDirection == -1 ? "Bearish evidence is developing" : "No directional setup owns the market"
 
 //=============================================================================
-// 13A. BACKTESTING / REPLAY VALIDATION MODULE — PR1
+// 13A. BACKTESTING / REPLAY VALIDATION MODULE — PR1 / PR2
 // Dashboard-only validation layer for replay review.
 // PR1 records the most recent BUY / SELL decision and the condition checklist
-// that existed when the signal fired. It does not change BUY / SELL logic,
-// plots, trade plans, or alerts.
+// that existed when the signal fired.
+// PR2 adds selectable replay dashboard pages so all validation details remain
+// readable without changing BUY / SELL logic, plots, trade plans, or alerts.
 //=============================================================================
 validationYN(bool condition) =>
     condition ? "✓" : "—"
@@ -3431,47 +3440,109 @@ if barstate.islast
         string dashboardTargetRR = showSmartTradePanel and not na(lastPlanTarget) and not na(lastPlanRR) ? str.tostring(lastPlanTarget, format.mintick) + " / 1:" + str.tostring(lastPlanRR, "#.##") : "—"
 
         if isReplayValidation
+            bool replayPageCurrentSetup = replayDashboardPage == "Current Setup"
+            bool replayPageChecklist = replayDashboardPage == "Replay Checklist"
+            bool replayPageIFAExecution = replayDashboardPage == "IFA + Execution"
+            string replayPageTitle = replayPageCurrentSetup ? "PAGE 1 — CURRENT SETUP" : replayPageChecklist ? "PAGE 2 — REPLAY CHECKLIST" : "PAGE 3 — IFA + EXECUTION"
+
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 VAL PR1 FIX1", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 0, 1, "REPLAY VALIDATION", text_color = color.white, bgcolor = color.new(color.black, 0))
+            table.cell(dash, 1, 0, "v1.0 VAL PR2", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 0, 1, replayPageTitle, text_color = color.white, bgcolor = color.new(color.black, 0), text_size = size.small)
             table.cell(dash, 1, 1, validationModeDashboardText, text_color = validationModeDashboardColor, bgcolor = color.new(color.black, 0), text_size = size.small)
 
-            table.cell(dash, 0, 2, "Current Decision", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 2, lastDecision, text_color = decisionColor, bgcolor = panelColor, text_size = size.large)
+            if replayPageCurrentSetup
+                table.cell(dash, 0, 2, "Current Decision", text_color = neutralColor, bgcolor = panelColor)
+                table.cell(dash, 1, 2, lastDecision, text_color = decisionColor, bgcolor = panelColor, text_size = size.large)
 
-            table.cell(dash, 0, 3, "Current Score", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 3, compactScore, text_color = lastScore >= minimumScore ? bullColor : neutralColor, bgcolor = panelColor)
+                table.cell(dash, 0, 3, "Current Score", text_color = neutralColor, bgcolor = panelColor)
+                table.cell(dash, 1, 3, compactScore, text_color = lastScore >= minimumScore ? bullColor : neutralColor, bgcolor = panelColor)
 
-            table.cell(dash, 0, 4, "Replay Signal", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 4, validationDecisionDashboardText, text_color = validationDecisionDashboardColor, bgcolor = panelColor, text_size = size.small)
+                table.cell(dash, 0, 4, "Direction", text_color = neutralColor, bgcolor = panelColor)
+                table.cell(dash, 1, 4, marketDirectionText, text_color = marketDirectionColor, bgcolor = panelColor)
 
-            table.cell(dash, 0, 5, "Checklist 1", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 5, validationLastChecklistPrimaryText, text_color = validationDecisionDashboardColor, bgcolor = panelColor, text_size = size.tiny)
+                table.cell(dash, 0, 5, "Market Phase", text_color = neutralColor, bgcolor = panelColor)
+                table.cell(dash, 1, 5, marketPhaseText, text_color = marketPhaseText == "Conflict" ? bearColor : neutralColor, bgcolor = panelColor)
 
-            table.cell(dash, 0, 6, "Checklist 2", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 6, validationLastChecklistSecondaryText, text_color = validationDecisionDashboardColor, bgcolor = panelColor, text_size = size.tiny)
+                table.cell(dash, 0, 6, "Structure", text_color = neutralColor, bgcolor = panelColor)
+                table.cell(dash, 1, 6, latestStructureEvent, text_color = str.contains(latestStructureEvent, "Bullish") ? bullColor : str.contains(latestStructureEvent, "Bearish") ? bearColor : neutralColor, bgcolor = panelColor)
 
-            table.cell(dash, 0, 7, "Review Note", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 7, validationLastReviewNoteText, text_color = validationDecisionDashboardColor, bgcolor = panelColor, text_size = size.tiny)
+                table.cell(dash, 0, 7, "OB / FVG", text_color = neutralColor, bgcolor = panelColor)
+                table.cell(dash, 1, 7, (obActive ? zoneText : "OB ...") + " / " + (fvgActive ? fvgText : "FVG ..."), text_color = obActive ? (activeBullish ? bullColor : bearColor) : neutralColor, bgcolor = panelColor, text_size = size.tiny)
 
-            table.cell(dash, 0, 8, "Direction", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 8, marketDirectionText, text_color = marketDirectionColor, bgcolor = panelColor)
+                table.cell(dash, 0, 8, "Replay Signal", text_color = neutralColor, bgcolor = panelColor)
+                table.cell(dash, 1, 8, validationDecisionDashboardText, text_color = validationDecisionDashboardColor, bgcolor = panelColor, text_size = size.tiny)
 
-            table.cell(dash, 0, 9, "Structure", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 9, latestStructureEvent, text_color = str.contains(latestStructureEvent, "Bullish") ? bullColor : str.contains(latestStructureEvent, "Bearish") ? bearColor : neutralColor, bgcolor = panelColor)
+                table.cell(dash, 0, 9, "Objective", text_color = neutralColor, bgcolor = panelColor)
+                table.cell(dash, 1, 9, currentObjectiveText, text_color = marketDirectionColor, bgcolor = panelColor, text_size = size.tiny)
 
-            table.cell(dash, 0, 10, "IFA Permission", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 10, ifaPermissionDashboardText, text_color = ifaPermissionDashboardColor, bgcolor = panelColor, text_size = size.tiny)
+                table.cell(dash, 0, 10, "Next Step", text_color = neutralColor, bgcolor = panelColor)
+                table.cell(dash, 1, 10, decisionNextStep, text_color = marketDirectionColor, bgcolor = panelColor, text_size = size.tiny)
 
-            table.cell(dash, 0, 11, "Execution", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 11, executionStatusText + " / " + executionEntryLockText, text_color = executionStatusText == "Triggered" ? bullColor : executionStatusText == "Stand Down" ? bearColor : neutralColor, bgcolor = panelColor, text_size = size.tiny)
+            else if replayPageChecklist
+                table.cell(dash, 0, 2, "Replay Signal", text_color = neutralColor, bgcolor = panelColor)
+                table.cell(dash, 1, 2, validationDecisionDashboardText, text_color = validationDecisionDashboardColor, bgcolor = panelColor, text_size = size.small)
 
-            table.cell(dash, 0, 12, "Next Step", text_color = neutralColor, bgcolor = panelColor)
-            table.cell(dash, 1, 12, decisionNextStep, text_color = marketDirectionColor, bgcolor = panelColor, text_size = size.tiny)
+                table.cell(dash, 0, 3, "Checklist 1", text_color = neutralColor, bgcolor = panelColor)
+                table.cell(dash, 1, 3, validationLastChecklistPrimaryText, text_color = validationDecisionDashboardColor, bgcolor = panelColor, text_size = size.tiny)
+
+                table.cell(dash, 0, 4, "Checklist 2", text_color = neutralColor, bgcolor = panelColor)
+                table.cell(dash, 1, 4, validationLastChecklistSecondaryText, text_color = validationDecisionDashboardColor, bgcolor = panelColor, text_size = size.tiny)
+
+                table.cell(dash, 0, 5, "Review Note", text_color = neutralColor, bgcolor = panelColor)
+                table.cell(dash, 1, 5, validationLastReviewNoteText, text_color = validationDecisionDashboardColor, bgcolor = panelColor, text_size = size.tiny)
+
+                table.cell(dash, 0, 6, "Current Decision", text_color = neutralColor, bgcolor = panelColor)
+                table.cell(dash, 1, 6, lastDecision, text_color = decisionColor, bgcolor = panelColor)
+
+                table.cell(dash, 0, 7, "Current Score", text_color = neutralColor, bgcolor = panelColor)
+                table.cell(dash, 1, 7, compactScore, text_color = lastScore >= minimumScore ? bullColor : neutralColor, bgcolor = panelColor)
+
+                table.cell(dash, 0, 8, "IFA Tracking", text_color = neutralColor, bgcolor = panelColor)
+                table.cell(dash, 1, 8, validationTrackIFAPermission ? "Included in checklist" : "Excluded from checklist", text_color = validationTrackIFAPermission ? bullColor : neutralColor, bgcolor = panelColor, text_size = size.tiny)
+
+                table.cell(dash, 0, 9, "Memory Window", text_color = neutralColor, bgcolor = panelColor)
+                table.cell(dash, 1, 9, str.tostring(validationReviewMemoryBars) + " bars", text_color = neutralColor, bgcolor = panelColor)
+
+                table.cell(dash, 0, 10, "Next Step", text_color = neutralColor, bgcolor = panelColor)
+                table.cell(dash, 1, 10, decisionNextStep, text_color = marketDirectionColor, bgcolor = panelColor, text_size = size.tiny)
+
+            else if replayPageIFAExecution
+                table.cell(dash, 0, 2, "IFA Gate", text_color = neutralColor, bgcolor = panelColor)
+                table.cell(dash, 1, 2, ifaDashboardText, text_color = ifaDashboardColor, bgcolor = panelColor, text_size = size.tiny)
+
+                table.cell(dash, 0, 3, "IFA Quality", text_color = neutralColor, bgcolor = panelColor)
+                table.cell(dash, 1, 3, ifaQualityDashboardText, text_color = ifaQualityDashboardColor, bgcolor = panelColor, text_size = size.tiny)
+
+                table.cell(dash, 0, 4, "IFA Imbalance", text_color = neutralColor, bgcolor = panelColor)
+                table.cell(dash, 1, 4, ifaImbalanceDashboardText, text_color = ifaImbalanceDashboardColor, bgcolor = panelColor, text_size = size.tiny)
+
+                table.cell(dash, 0, 5, "IFA OB", text_color = neutralColor, bgcolor = panelColor)
+                table.cell(dash, 1, 5, ifaOBQualityDashboardText, text_color = ifaOBQualityDashboardColor, bgcolor = panelColor, text_size = size.tiny)
+
+                table.cell(dash, 0, 6, "IFA Summary", text_color = neutralColor, bgcolor = panelColor)
+                table.cell(dash, 1, 6, ifaFootprintSummaryText, text_color = ifaFootprintSummaryColor, bgcolor = panelColor, text_size = size.tiny)
+
+                table.cell(dash, 0, 7, "IFA Permission", text_color = neutralColor, bgcolor = panelColor)
+                table.cell(dash, 1, 7, ifaPermissionDashboardText, text_color = ifaPermissionDashboardColor, bgcolor = panelColor, text_size = size.tiny)
+
+                table.cell(dash, 0, 8, "Decision Gate", text_color = neutralColor, bgcolor = panelColor)
+                table.cell(dash, 1, 8, ifaDecisionGateAuditText, text_color = ifaDecisionGateAuditColor, bgcolor = panelColor, text_size = size.tiny)
+
+                table.cell(dash, 0, 9, "Execution", text_color = neutralColor, bgcolor = panelColor)
+                table.cell(dash, 1, 9, executionStatusText + " / " + executionEntryLockText, text_color = executionStatusText == "Triggered" ? bullColor : executionStatusText == "Stand Down" ? bearColor : neutralColor, bgcolor = panelColor, text_size = size.tiny)
+
+                table.cell(dash, 0, 10, "Entry Permission", text_color = neutralColor, bgcolor = panelColor)
+                table.cell(dash, 1, 10, executionEntryPermissionText, text_color = executionEntryPermissionColor, bgcolor = panelColor)
+
+                table.cell(dash, 0, 11, "Protected Guard", text_color = neutralColor, bgcolor = panelColor)
+                table.cell(dash, 1, 11, sniperProtectedGuardText, text_color = sniperProtectedGuardColor, bgcolor = panelColor, text_size = size.tiny)
+
+                table.cell(dash, 0, 12, "Sniper Sweep", text_color = neutralColor, bgcolor = panelColor)
+                table.cell(dash, 1, 12, sniperInternalSweepText, text_color = sniperInternalSweepColor, bgcolor = panelColor, text_size = size.tiny)
 
         else if isMorningBrief
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 VAL PR1 FIX1", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 VAL PR2", text_color = color.white, bgcolor = panelColor, text_size = size.small)
             table.cell(dash, 0, 1, "MORNING BRIEF", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 1, "", bgcolor = color.new(color.black, 0))
 
@@ -3504,7 +3575,7 @@ if barstate.islast
 
         else if isExecutionFocus
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 VAL PR1 FIX1", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 VAL PR2", text_color = color.white, bgcolor = panelColor, text_size = size.small)
             table.cell(dash, 0, 1, "EXECUTION FOCUS", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 1, lastDecision, text_color = decisionColor, bgcolor = color.new(color.black, 0), text_size = size.large)
 
@@ -3595,7 +3666,7 @@ if barstate.islast
 
         else if isTradeManagement
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 VAL PR1 FIX1", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 VAL PR2", text_color = color.white, bgcolor = panelColor, text_size = size.small)
             table.cell(dash, 0, 1, "TRADE MANAGEMENT", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 1, lastPlanDirection, text_color = lastPlanDirection == "LONG" ? bullColor : lastPlanDirection == "SHORT" ? bearColor : neutralColor, bgcolor = color.new(color.black, 0), text_size = size.large)
 
@@ -3622,7 +3693,7 @@ if barstate.islast
 
         else if isFull
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 VAL PR1 FIX1", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 VAL PR2", text_color = color.white, bgcolor = panelColor, text_size = size.small)
 
             table.cell(dash, 0, 1, "FULL DASHBOARD", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 1, "", bgcolor = color.new(color.black, 0))
