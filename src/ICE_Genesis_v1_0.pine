@@ -1,6 +1,6 @@
 //@version=6
 indicator(
-     "ICE Genesis v1.0 - VAL PR4",
+     "ICE Genesis v1.0 - VAL PR5",
 shorttitle = "ICEGen",     overlay = true,
      max_labels_count = 250,
      max_lines_count = 200,
@@ -542,7 +542,7 @@ showReplayValidationRows = input.bool(
 replayDashboardPage = input.string(
      "Current Setup",
      "Replay Dashboard Page",
-     options = ["Current Setup", "Replay Checklist", "IFA + Execution", "Signal Outcome"],
+     options = ["Current Setup", "Replay Checklist", "IFA + Execution", "Signal Outcome", "Performance Stats"],
      group = groupValidation
 )
 
@@ -602,7 +602,7 @@ londonShade = color.new(color.rgb(35, 95, 180), 91)
 newYorkShade = color.new(color.rgb(130, 70, 170), 91)
 
 //=============================================================================
-// 2A. CHART READABILITY LABEL TEXT — PR9 / ZIG ZAG PR3 / IFA PR14 / VAL PR4
+// 2A. CHART READABILITY LABEL TEXT — PR9 / ZIG ZAG PR3 / IFA PR14 / VAL PR5
 // Centralized label text for Full / Short / Minimal chart display modes.
 // VAL PR1 begins the Backtesting / Replay Validation module without changing BUY / SELL logic.
 // VAL PR1 FIX1 adds a dedicated Replay Validation dashboard mode so validation rows remain visible on smaller screens.
@@ -610,6 +610,7 @@ newYorkShade = color.new(color.rgb(130, 70, 170), 91)
 // VAL PR3 freezes signal-time setup conditions so later bars cannot rewrite the saved replay snapshot.
 // VAL PR3 FIX1 moves snapshot capture and display formatting into functions to resolve CE10295 without changing behavior.
 // VAL PR4 tracks entry fill, target, stop, bars held, MFE, MAE, and the final result for the latest saved signal.
+// VAL PR5 aggregates completed outcomes into replay performance statistics by direction and R result.
 //=============================================================================
 labelModeFull = chartLabelMode == "Full"
 labelModeShort = chartLabelMode == "Short"
@@ -2691,7 +2692,7 @@ decisionStory = decisionConflict ? decisionMissing :
      decisionDirection == -1 ? "Bearish evidence is developing" : "No directional setup owns the market"
 
 //=============================================================================
-// 13A. BACKTESTING / REPLAY VALIDATION MODULE — PR1 / PR2 / PR3 / PR4
+// 13A. BACKTESTING / REPLAY VALIDATION MODULE — PR1 / PR2 / PR3 / PR4 / PR5
 // Dashboard-only validation layer for replay review.
 // PR1 records the most recent BUY / SELL decision and the condition checklist
 // that existed when the signal fired.
@@ -2702,6 +2703,8 @@ decisionStory = decisionConflict ? decisionMissing :
 // changes cannot rewrite the recorded replay checklist.
 // PR4 tracks the latest signal from planned entry through target, stop, or timeout.
 // It also records bars held, maximum favorable excursion, and maximum adverse excursion.
+// PR5 aggregates replay outcomes into total signals, completed trades, targets,
+// stops, win rate, average/net R, direction results, expirations, and timeouts.
 //=============================================================================
 validationYN(bool condition) =>
     condition ? "✓" : "—"
@@ -2818,10 +2821,11 @@ validationFormatSnapshot(
     color ifaColor = not captured or not lastIFATracking ? neutralDisplayColor : lastIFA ? bullDisplayColor : warningDisplayColor
     [fresh, ageText, modeText, modeColor, decisionText, decisionColor, statusText, statusColor, directionText, scoreGradeText, barAgeText, ifaText, ifaColor]
 
-// VAL PR4 — Function-wrapped signal outcome tracker.
-// The tracker waits for the planned entry to trade after the signal candle, then
-// records target/stop resolution, bars held, MFE, and MAE. When target and stop
-// occur on the same candle, the user-selected priority resolves the ambiguity.
+// VAL PR4 / PR5 — Function-wrapped signal outcome tracker.
+// PR4 waits for the planned entry to trade after the signal candle, then records
+// target/stop resolution, bars held, MFE, and MAE.
+// PR5 exposes a one-bar completion event, direction, category, and final R so the
+// performance engine can count each finished replay outcome exactly once.
 type ValidationOutcome
     bool captured
     string statusText
@@ -2837,6 +2841,11 @@ type ValidationOutcome
     string resultText
     color resultColor
     string noteText
+    bool completionEvent
+    bool completedTrade
+    int direction
+    string category
+    float resultR
 
 validationTrackSignalOutcome(
      bool enabled,
@@ -2863,6 +2872,7 @@ validationTrackSignalOutcome(
     float newStop = na
     float newTarget = na
     float newRisk = na
+    bool completionEvent = false
 
     if newDirection == 1
         newEntry := selectedEntryMode == "OB Proximal" ? obTop : selectedEntryMode == "FVG Midpoint" and currentFVGActive ? (fvgTop + fvgBottom) / 2.0 : (obTop + obBottom) / 2.0
@@ -2888,7 +2898,9 @@ validationTrackSignalOutcome(
     var float trackedRisk = na
     var float maximumFavorable = 0.0
     var float maximumAdverse = 0.0
+    var float finalResultR = na
     var string resultText = "Waiting for signal"
+    var string resultCategory = "None"
 
     if enabled and signalNow
         bool levelsReady = not na(newEntry) and not na(newStop) and not na(newTarget) and not na(newRisk)
@@ -2905,7 +2917,10 @@ validationTrackSignalOutcome(
         trackedRisk := newRisk
         maximumFavorable := 0.0
         maximumAdverse := 0.0
+        finalResultR := na
         resultText := levelsReady ? "Waiting for Entry" : "Invalid Plan Levels"
+        resultCategory := levelsReady ? "Open" : "Invalid"
+        completionEvent := not levelsReady
 
     if enabled and captured and not completed and not signalNow and not na(signalBar) and bar_index > signalBar
         int signalAge = bar_index - signalBar
@@ -2916,6 +2931,7 @@ validationTrackSignalOutcome(
                 entryFilled := true
                 entryBar := bar_index
                 resultText := "Open — Neither Hit"
+                resultCategory := "Open"
 
         if entryFilled
             float favorableNow = trackedDirection == 1 ? math.max(0.0, high - trackedEntry) : math.max(0.0, trackedEntry - low)
@@ -2929,24 +2945,47 @@ validationTrackSignalOutcome(
             if targetHit and stopHit
                 completed := true
                 resultBar := bar_index
-                resultText := sameBarPriority == "Target First" ? "Target Reached — Same Bar" : "Stop Reached — Same Bar"
+                completionEvent := true
+                if sameBarPriority == "Target First"
+                    resultText := "Target Reached — Same Bar"
+                    resultCategory := "Target"
+                    finalResultR := rrTarget
+                else
+                    resultText := "Stop Reached — Same Bar"
+                    resultCategory := "Stop"
+                    finalResultR := -1.0
             else if targetHit
                 completed := true
                 resultBar := bar_index
+                completionEvent := true
                 resultText := "Target Reached"
+                resultCategory := "Target"
+                finalResultR := rrTarget
             else if stopHit
                 completed := true
                 resultBar := bar_index
+                completionEvent := true
                 resultText := "Stop Reached"
+                resultCategory := "Stop"
+                finalResultR := -1.0
 
         if not completed and signalAge >= maxTrackingBars
             completed := true
             resultBar := bar_index
-            resultText := entryFilled ? "Timed Out — Neither Hit" : "Expired — No Entry"
+            completionEvent := true
+            if entryFilled
+                resultText := "Timed Out — Neither Hit"
+                resultCategory := "Timed Out"
+                finalResultR := not na(trackedRisk) and trackedRisk > 0 ? (trackedDirection == 1 ? (close - trackedEntry) / trackedRisk : (trackedEntry - close) / trackedRisk) : na
+            else
+                resultText := "Expired — No Entry"
+                resultCategory := "Expired"
+                finalResultR := na
 
     int barsHeld = entryFilled and not na(entryBar) ? ((completed and not na(resultBar) ? resultBar : bar_index) - entryBar) : 0
     float mfeR = not na(trackedRisk) and trackedRisk > 0 ? maximumFavorable / trackedRisk : na
     float maeR = not na(trackedRisk) and trackedRisk > 0 ? maximumAdverse / trackedRisk : na
+    bool completedTrade = completed and entryFilled and (resultCategory == "Target" or resultCategory == "Stop" or resultCategory == "Timed Out")
 
     string statusText = not enabled ? "Outcome tracking OFF" : not captured ? "Waiting for BUY / SELL" : completed ? "Outcome Complete" : entryFilled ? "Trade Active" : "Waiting for Entry"
     color statusColor = not enabled or not captured ? neutralDisplayColor : completed ? (str.contains(resultText, "Target") ? bullDisplayColor : str.contains(resultText, "Stop") ? bearDisplayColor : warningDisplayColor) : entryFilled ? bullDisplayColor : warningDisplayColor
@@ -2961,13 +3000,129 @@ validationTrackSignalOutcome(
     string noteText = not enabled ? "Enable outcome tracking in validation settings." : "Bar-based replay; " + sameBarPriority + " resolves same-bar TP / SL."
     color resultColor = not captured ? neutralDisplayColor : str.contains(resultText, "Target") ? bullDisplayColor : str.contains(resultText, "Stop") ? bearDisplayColor : (str.contains(resultText, "Invalid") or str.contains(resultText, "Expired") or str.contains(resultText, "Timed Out")) ? warningDisplayColor : neutralDisplayColor
 
-    ValidationOutcome.new(captured, statusText, statusColor, signalText, signalColor, planText, targetText, entryText, barsHeldText, mfeText, maeText, resultText, resultColor, noteText)
+    ValidationOutcome.new(captured, statusText, statusColor, signalText, signalColor, planText, targetText, entryText, barsHeldText, mfeText, maeText, resultText, resultColor, noteText, completionEvent, completedTrade, trackedDirection, resultCategory, finalResultR)
+
+// VAL PR5 — Function-wrapped replay performance statistics.
+// Counters are accumulated from loaded chart history and update only when a new
+// signal appears or the outcome tracker emits a one-bar completion event.
+type ValidationPerformance
+    string totalSignalsText
+    string completedTradesText
+    string targetsStopsText
+    string expiredTimedOutText
+    string winRateText
+    color winRateColor
+    string averageRText
+    color averageRColor
+    string netRText
+    color netRColor
+    string bullishResultsText
+    string bearishResultsText
+    string currentOutcomeText
+    color currentOutcomeColor
+    string noteText
+
+validationTrackPerformance(
+     bool enabled,
+     bool longSignal,
+     bool shortSignal,
+     ValidationOutcome outcome,
+     color bullDisplayColor,
+     color bearDisplayColor,
+     color neutralDisplayColor,
+     color warningDisplayColor) =>
+    bool signalNow = longSignal or shortSignal
+
+    var int totalSignals = 0
+    var int completedTrades = 0
+    var int targetTrades = 0
+    var int stopTrades = 0
+    var int timedOutTrades = 0
+    var int expiredSignals = 0
+    var int profitableTrades = 0
+    var float totalR = 0.0
+
+    var int bullCompleted = 0
+    var int bullProfitable = 0
+    var int bullLosing = 0
+    var int bullTimedOut = 0
+    var float bullTotalR = 0.0
+
+    var int bearCompleted = 0
+    var int bearProfitable = 0
+    var int bearLosing = 0
+    var int bearTimedOut = 0
+    var float bearTotalR = 0.0
+
+    if enabled and signalNow
+        totalSignals += 1
+
+    if enabled and outcome.completionEvent
+        if outcome.category == "Expired"
+            expiredSignals += 1
+        else if outcome.completedTrade
+            completedTrades += 1
+            float countedR = na(outcome.resultR) ? 0.0 : outcome.resultR
+            totalR += countedR
+
+            if outcome.category == "Target"
+                targetTrades += 1
+            else if outcome.category == "Stop"
+                stopTrades += 1
+            else if outcome.category == "Timed Out"
+                timedOutTrades += 1
+
+            if countedR > 0
+                profitableTrades += 1
+
+            if outcome.direction == 1
+                bullCompleted += 1
+                bullTotalR += countedR
+                if countedR > 0
+                    bullProfitable += 1
+                else if countedR < 0
+                    bullLosing += 1
+                if outcome.category == "Timed Out"
+                    bullTimedOut += 1
+            else if outcome.direction == -1
+                bearCompleted += 1
+                bearTotalR += countedR
+                if countedR > 0
+                    bearProfitable += 1
+                else if countedR < 0
+                    bearLosing += 1
+                if outcome.category == "Timed Out"
+                    bearTimedOut += 1
+
+    float winRate = completedTrades > 0 ? profitableTrades * 100.0 / completedTrades : na
+    float averageR = completedTrades > 0 ? totalR / completedTrades : na
+    float bullAverageR = bullCompleted > 0 ? bullTotalR / bullCompleted : na
+    float bearAverageR = bearCompleted > 0 ? bearTotalR / bearCompleted : na
+
+    string totalSignalsText = not enabled ? "Off" : str.tostring(totalSignals)
+    string completedTradesText = not enabled ? "Off" : str.tostring(completedTrades)
+    string targetsStopsText = not enabled ? "Off" : "TP " + str.tostring(targetTrades) + " / SL " + str.tostring(stopTrades)
+    string expiredTimedOutText = not enabled ? "Off" : "Expired " + str.tostring(expiredSignals) + " / Timed Out " + str.tostring(timedOutTrades)
+    string winRateText = not enabled or na(winRate) ? "—" : str.tostring(winRate, "#.##") + "%"
+    color winRateColor = not enabled or na(winRate) ? neutralDisplayColor : winRate >= 50 ? bullDisplayColor : bearDisplayColor
+    string averageRText = not enabled or na(averageR) ? "—" : str.tostring(averageR, "#.##") + "R"
+    color averageRColor = not enabled or na(averageR) ? neutralDisplayColor : averageR > 0 ? bullDisplayColor : averageR < 0 ? bearDisplayColor : warningDisplayColor
+    string netRText = not enabled ? "—" : str.tostring(totalR, "#.##") + "R"
+    color netRColor = not enabled ? neutralDisplayColor : totalR > 0 ? bullDisplayColor : totalR < 0 ? bearDisplayColor : warningDisplayColor
+    string bullishResultsText = not enabled ? "Off" : "Trades " + str.tostring(bullCompleted) + " / W " + str.tostring(bullProfitable) + " / L " + str.tostring(bullLosing) + " / TO " + str.tostring(bullTimedOut) + " / Avg " + (na(bullAverageR) ? "—" : str.tostring(bullAverageR, "#.##") + "R")
+    string bearishResultsText = not enabled ? "Off" : "Trades " + str.tostring(bearCompleted) + " / W " + str.tostring(bearProfitable) + " / L " + str.tostring(bearLosing) + " / TO " + str.tostring(bearTimedOut) + " / Avg " + (na(bearAverageR) ? "—" : str.tostring(bearAverageR, "#.##") + "R")
+    string currentOutcomeText = not enabled ? "Tracking Off" : outcome.statusText + " / " + outcome.resultText
+    color currentOutcomeColor = not enabled ? neutralDisplayColor : outcome.resultColor
+    string noteText = "Stats rebuild from loaded chart history. Win rate uses positive-R completed trades."
+
+    ValidationPerformance.new(totalSignalsText, completedTradesText, targetsStopsText, expiredTimedOutText, winRateText, winRateColor, averageRText, averageRColor, netRText, netRColor, bullishResultsText, bearishResultsText, currentOutcomeText, currentOutcomeColor, noteText)
 
 [validationSnapshotCaptured, validationLastDecisionBar, validationLastDecisionDirection, validationLastDecisionScore, validationLastDecisionGrade, validationLastSignalLiquidity, validationLastSignalDisplacement, validationLastSignalStructure, validationLastSignalOB, validationLastSignalFVG, validationLastSignalOTE, validationLastSignalHTF, validationLastSignalIFAPermission, validationLastIFATrackingEnabled, validationLastDecisionText, validationLastChecklistPrimaryText, validationLastChecklistSecondaryText, validationLastReviewNoteText, validationLastDecisionColor] = validationCaptureSnapshot(enableReplayValidation, decisionLongSignal, decisionShortSignal, decisionScore, decisionGrade, bullLiquidityState, bearLiquidityState, bullDisplacementState, bearDisplacementState, bullStructureState, bearStructureState, bullOBState, bearOBState, bullFVGState, bearFVGState, bullOTEState, bearOTEState, bullHTFState, bearHTFState, institutionalBullFootprintPermission, institutionalBearFootprintPermission, validationTrackIFAPermission, bullColor, bearColor)
 
 [validationLastDecisionFresh, validationLastDecisionAgeText, validationModeDashboardText, validationModeDashboardColor, validationDecisionDashboardText, validationDecisionDashboardColor, validationSnapshotStatusText, validationSnapshotStatusColor, validationSnapshotDirectionText, validationSnapshotScoreGradeText, validationSnapshotBarAgeText, validationSnapshotIFAText, validationSnapshotIFAColor] = validationFormatSnapshot(enableReplayValidation, validationSnapshotCaptured, validationLastDecisionBar, validationLastDecisionDirection, validationLastDecisionScore, validationLastDecisionGrade, validationLastSignalIFAPermission, validationLastIFATrackingEnabled, validationLastDecisionText, validationLastDecisionColor, validationReviewMemoryBars, bullColor, neutralColor, liqColor)
 
 validationOutcome = validationTrackSignalOutcome(enableReplayValidation and validationTrackOutcomes, decisionLongSignal, decisionShortSignal, entryMode, fvgActive, activeOBTop, activeOBBottom, activeFVGTop, activeFVGBottom, atr, stopBufferATR, targetRR, validationOutcomeMaxBars, validationSameBarPriority, bullColor, bearColor, neutralColor, liqColor)
+validationPerformance = validationTrackPerformance(enableReplayValidation and validationTrackOutcomes, decisionLongSignal, decisionShortSignal, validationOutcome, bullColor, bearColor, neutralColor, liqColor)
 
 //=============================================================================
 // 13B. MARKET NARRATIVE ENGINE — PR7
@@ -3644,8 +3799,8 @@ isCompact = dashboardMode == "Compact"
 isMinimal = dashboardMode == "Minimal"
 var table dash = table.new(position.top_right, 2, 34, border_width = 1, border_color = color.new(neutralColor, 65))
 
-// VAL PR4 keeps the new outcome page out of the main script body to preserve
-// compiler headroom after the PR3 CE10295 compaction fix.
+// VAL PR4 / PR5 keep outcome and performance pages out of the main script body
+// to preserve compiler headroom after the PR3 CE10295 compaction fix.
 renderValidationOutcomePage(targetTable, ValidationOutcome outcome, color panelBackground, color labelColor, color favorableColor, color adverseColor) =>
     table.cell(targetTable, 0, 2, "Saved Signal", text_color = labelColor, bgcolor = panelBackground)
     table.cell(targetTable, 1, 2, outcome.signalText, text_color = outcome.signalColor, bgcolor = panelBackground, text_size = size.small)
@@ -3667,6 +3822,31 @@ renderValidationOutcomePage(targetTable, ValidationOutcome outcome, color panelB
     table.cell(targetTable, 1, 10, outcome.resultText, text_color = outcome.resultColor, bgcolor = panelBackground, text_size = size.small)
     table.cell(targetTable, 0, 11, "Evaluation Note", text_color = labelColor, bgcolor = panelBackground)
     table.cell(targetTable, 1, 11, outcome.noteText, text_color = labelColor, bgcolor = panelBackground, text_size = size.tiny)
+
+
+renderValidationPerformancePage(targetTable, ValidationPerformance performance, color panelBackground, color labelColor, color bullDisplayColor, color bearDisplayColor) =>
+    table.cell(targetTable, 0, 2, "Total Signals", text_color = labelColor, bgcolor = panelBackground)
+    table.cell(targetTable, 1, 2, performance.totalSignalsText, text_color = labelColor, bgcolor = panelBackground)
+    table.cell(targetTable, 0, 3, "Completed Trades", text_color = labelColor, bgcolor = panelBackground)
+    table.cell(targetTable, 1, 3, performance.completedTradesText, text_color = labelColor, bgcolor = panelBackground)
+    table.cell(targetTable, 0, 4, "Targets / Stops", text_color = labelColor, bgcolor = panelBackground)
+    table.cell(targetTable, 1, 4, performance.targetsStopsText, text_color = labelColor, bgcolor = panelBackground)
+    table.cell(targetTable, 0, 5, "Expired / Timed Out", text_color = labelColor, bgcolor = panelBackground)
+    table.cell(targetTable, 1, 5, performance.expiredTimedOutText, text_color = labelColor, bgcolor = panelBackground, text_size = size.tiny)
+    table.cell(targetTable, 0, 6, "Win Rate", text_color = labelColor, bgcolor = panelBackground)
+    table.cell(targetTable, 1, 6, performance.winRateText, text_color = performance.winRateColor, bgcolor = panelBackground, text_size = size.large)
+    table.cell(targetTable, 0, 7, "Average R", text_color = labelColor, bgcolor = panelBackground)
+    table.cell(targetTable, 1, 7, performance.averageRText, text_color = performance.averageRColor, bgcolor = panelBackground)
+    table.cell(targetTable, 0, 8, "Net R", text_color = labelColor, bgcolor = panelBackground)
+    table.cell(targetTable, 1, 8, performance.netRText, text_color = performance.netRColor, bgcolor = panelBackground)
+    table.cell(targetTable, 0, 9, "Bullish Results", text_color = labelColor, bgcolor = panelBackground)
+    table.cell(targetTable, 1, 9, performance.bullishResultsText, text_color = bullDisplayColor, bgcolor = panelBackground, text_size = size.tiny)
+    table.cell(targetTable, 0, 10, "Bearish Results", text_color = labelColor, bgcolor = panelBackground)
+    table.cell(targetTable, 1, 10, performance.bearishResultsText, text_color = bearDisplayColor, bgcolor = panelBackground, text_size = size.tiny)
+    table.cell(targetTable, 0, 11, "Current Outcome", text_color = labelColor, bgcolor = panelBackground)
+    table.cell(targetTable, 1, 11, performance.currentOutcomeText, text_color = performance.currentOutcomeColor, bgcolor = panelBackground, text_size = size.tiny)
+    table.cell(targetTable, 0, 12, "Statistics Note", text_color = labelColor, bgcolor = panelBackground)
+    table.cell(targetTable, 1, 12, performance.noteText, text_color = labelColor, bgcolor = panelBackground, text_size = size.tiny)
 
 if barstate.islast
     table.clear(dash, 0, 0, 1, 33)
@@ -3692,10 +3872,11 @@ if barstate.islast
             bool replayPageChecklist = replayDashboardPage == "Replay Checklist"
             bool replayPageIFAExecution = replayDashboardPage == "IFA + Execution"
             bool replayPageOutcome = replayDashboardPage == "Signal Outcome"
-            string replayPageTitle = replayPageCurrentSetup ? "PAGE 1 — CURRENT SETUP" : replayPageChecklist ? "PAGE 2 — REPLAY CHECKLIST" : replayPageIFAExecution ? "PAGE 3 — IFA + EXECUTION" : "PAGE 4 — SIGNAL OUTCOME"
+            bool replayPagePerformance = replayDashboardPage == "Performance Stats"
+            string replayPageTitle = replayPageCurrentSetup ? "PAGE 1 — CURRENT SETUP" : replayPageChecklist ? "PAGE 2 — REPLAY CHECKLIST" : replayPageIFAExecution ? "PAGE 3 — IFA + EXECUTION" : replayPageOutcome ? "PAGE 4 — SIGNAL OUTCOME" : "PAGE 5 — PERFORMANCE STATS"
 
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 VAL PR4", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 VAL PR5", text_color = color.white, bgcolor = panelColor, text_size = size.small)
             table.cell(dash, 0, 1, replayPageTitle, text_color = color.white, bgcolor = color.new(color.black, 0), text_size = size.small)
             table.cell(dash, 1, 1, validationModeDashboardText, text_color = validationModeDashboardColor, bgcolor = color.new(color.black, 0), text_size = size.small)
 
@@ -3810,9 +3991,12 @@ if barstate.islast
             else if replayPageOutcome
                 renderValidationOutcomePage(dash, validationOutcome, panelColor, neutralColor, bullColor, bearColor)
 
+            else if replayPagePerformance
+                renderValidationPerformancePage(dash, validationPerformance, panelColor, neutralColor, bullColor, bearColor)
+
         else if isMorningBrief
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 VAL PR4", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 VAL PR5", text_color = color.white, bgcolor = panelColor, text_size = size.small)
             table.cell(dash, 0, 1, "MORNING BRIEF", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 1, "", bgcolor = color.new(color.black, 0))
 
@@ -3845,7 +4029,7 @@ if barstate.islast
 
         else if isExecutionFocus
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 VAL PR4", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 VAL PR5", text_color = color.white, bgcolor = panelColor, text_size = size.small)
             table.cell(dash, 0, 1, "EXECUTION FOCUS", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 1, lastDecision, text_color = decisionColor, bgcolor = color.new(color.black, 0), text_size = size.large)
 
@@ -3936,7 +4120,7 @@ if barstate.islast
 
         else if isTradeManagement
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 VAL PR4", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 VAL PR5", text_color = color.white, bgcolor = panelColor, text_size = size.small)
             table.cell(dash, 0, 1, "TRADE MANAGEMENT", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 1, lastPlanDirection, text_color = lastPlanDirection == "LONG" ? bullColor : lastPlanDirection == "SHORT" ? bearColor : neutralColor, bgcolor = color.new(color.black, 0), text_size = size.large)
 
@@ -3963,7 +4147,7 @@ if barstate.islast
 
         else if isFull
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 VAL PR4", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 VAL PR5", text_color = color.white, bgcolor = panelColor, text_size = size.small)
 
             table.cell(dash, 0, 1, "FULL DASHBOARD", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 1, "", bgcolor = color.new(color.black, 0))
