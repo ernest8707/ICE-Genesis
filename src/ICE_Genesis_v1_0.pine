@@ -1,6 +1,6 @@
 //@version=6
 indicator(
-     "ICE Genesis v1.0 - VAL PR3 FIX1",
+     "ICE Genesis v1.0 - VAL PR4",
 shorttitle = "ICEGen",     overlay = true,
      max_labels_count = 250,
      max_lines_count = 200,
@@ -542,7 +542,28 @@ showReplayValidationRows = input.bool(
 replayDashboardPage = input.string(
      "Current Setup",
      "Replay Dashboard Page",
-     options = ["Current Setup", "Replay Checklist", "IFA + Execution"],
+     options = ["Current Setup", "Replay Checklist", "IFA + Execution", "Signal Outcome"],
+     group = groupValidation
+)
+
+validationTrackOutcomes = input.bool(
+     true,
+     "Track signal outcomes",
+     group = groupValidation
+)
+
+validationOutcomeMaxBars = input.int(
+     100,
+     "Outcome tracking bars",
+     minval = 5,
+     maxval = 1000,
+     group = groupValidation
+)
+
+validationSameBarPriority = input.string(
+     "Stop First",
+     "Same-bar target / stop priority",
+     options = ["Stop First", "Target First"],
      group = groupValidation
 )
 
@@ -581,13 +602,14 @@ londonShade = color.new(color.rgb(35, 95, 180), 91)
 newYorkShade = color.new(color.rgb(130, 70, 170), 91)
 
 //=============================================================================
-// 2A. CHART READABILITY LABEL TEXT — PR9 / ZIG ZAG PR3 / IFA PR14 / VAL PR3
+// 2A. CHART READABILITY LABEL TEXT — PR9 / ZIG ZAG PR3 / IFA PR14 / VAL PR4
 // Centralized label text for Full / Short / Minimal chart display modes.
 // VAL PR1 begins the Backtesting / Replay Validation module without changing BUY / SELL logic.
 // VAL PR1 FIX1 adds a dedicated Replay Validation dashboard mode so validation rows remain visible on smaller screens.
 // VAL PR2 adds selectable replay dashboard pages as a practical pagination substitute for table scrolling.
 // VAL PR3 freezes signal-time setup conditions so later bars cannot rewrite the saved replay snapshot.
 // VAL PR3 FIX1 moves snapshot capture and display formatting into functions to resolve CE10295 without changing behavior.
+// VAL PR4 tracks entry fill, target, stop, bars held, MFE, MAE, and the final result for the latest saved signal.
 //=============================================================================
 labelModeFull = chartLabelMode == "Full"
 labelModeShort = chartLabelMode == "Short"
@@ -2669,7 +2691,7 @@ decisionStory = decisionConflict ? decisionMissing :
      decisionDirection == -1 ? "Bearish evidence is developing" : "No directional setup owns the market"
 
 //=============================================================================
-// 13A. BACKTESTING / REPLAY VALIDATION MODULE — PR1 / PR2 / PR3
+// 13A. BACKTESTING / REPLAY VALIDATION MODULE — PR1 / PR2 / PR3 / PR4
 // Dashboard-only validation layer for replay review.
 // PR1 records the most recent BUY / SELL decision and the condition checklist
 // that existed when the signal fired.
@@ -2678,6 +2700,8 @@ decisionStory = decisionConflict ? decisionMissing :
 // PR3 stores each signal-time condition as an individual snapshot field.
 // Saved values update only when a new BUY / SELL signal fires, so later market
 // changes cannot rewrite the recorded replay checklist.
+// PR4 tracks the latest signal from planned entry through target, stop, or timeout.
+// It also records bars held, maximum favorable excursion, and maximum adverse excursion.
 //=============================================================================
 validationYN(bool condition) =>
     condition ? "✓" : "—"
@@ -2794,9 +2818,156 @@ validationFormatSnapshot(
     color ifaColor = not captured or not lastIFATracking ? neutralDisplayColor : lastIFA ? bullDisplayColor : warningDisplayColor
     [fresh, ageText, modeText, modeColor, decisionText, decisionColor, statusText, statusColor, directionText, scoreGradeText, barAgeText, ifaText, ifaColor]
 
+// VAL PR4 — Function-wrapped signal outcome tracker.
+// The tracker waits for the planned entry to trade after the signal candle, then
+// records target/stop resolution, bars held, MFE, and MAE. When target and stop
+// occur on the same candle, the user-selected priority resolves the ambiguity.
+type ValidationOutcome
+    bool captured
+    string statusText
+    color statusColor
+    string signalText
+    color signalColor
+    string planText
+    string targetText
+    string entryText
+    string barsHeldText
+    string mfeText
+    string maeText
+    string resultText
+    color resultColor
+    string noteText
+
+validationTrackSignalOutcome(
+     bool enabled,
+     bool longSignal,
+     bool shortSignal,
+     string selectedEntryMode,
+     bool currentFVGActive,
+     float obTop,
+     float obBottom,
+     float fvgTop,
+     float fvgBottom,
+     float currentATR,
+     float stopBuffer,
+     float rrTarget,
+     int maxTrackingBars,
+     string sameBarPriority,
+     color bullDisplayColor,
+     color bearDisplayColor,
+     color neutralDisplayColor,
+     color warningDisplayColor) =>
+    bool signalNow = longSignal or shortSignal
+    int newDirection = longSignal ? 1 : shortSignal ? -1 : 0
+    float newEntry = na
+    float newStop = na
+    float newTarget = na
+    float newRisk = na
+
+    if newDirection == 1
+        newEntry := selectedEntryMode == "OB Proximal" ? obTop : selectedEntryMode == "FVG Midpoint" and currentFVGActive ? (fvgTop + fvgBottom) / 2.0 : (obTop + obBottom) / 2.0
+        newStop := obBottom - currentATR * stopBuffer
+        newRisk := math.max(newEntry - newStop, syminfo.mintick)
+        newTarget := newEntry + newRisk * rrTarget
+    else if newDirection == -1
+        newEntry := selectedEntryMode == "OB Proximal" ? obBottom : selectedEntryMode == "FVG Midpoint" and currentFVGActive ? (fvgTop + fvgBottom) / 2.0 : (obTop + obBottom) / 2.0
+        newStop := obTop + currentATR * stopBuffer
+        newRisk := math.max(newStop - newEntry, syminfo.mintick)
+        newTarget := newEntry - newRisk * rrTarget
+
+    var bool captured = false
+    var bool entryFilled = false
+    var bool completed = false
+    var int trackedDirection = 0
+    var int signalBar = na
+    var int entryBar = na
+    var int resultBar = na
+    var float trackedEntry = na
+    var float trackedStop = na
+    var float trackedTarget = na
+    var float trackedRisk = na
+    var float maximumFavorable = 0.0
+    var float maximumAdverse = 0.0
+    var string resultText = "Waiting for signal"
+
+    if enabled and signalNow
+        bool levelsReady = not na(newEntry) and not na(newStop) and not na(newTarget) and not na(newRisk)
+        captured := true
+        entryFilled := false
+        completed := not levelsReady
+        trackedDirection := newDirection
+        signalBar := bar_index
+        entryBar := na
+        resultBar := levelsReady ? na : bar_index
+        trackedEntry := newEntry
+        trackedStop := newStop
+        trackedTarget := newTarget
+        trackedRisk := newRisk
+        maximumFavorable := 0.0
+        maximumAdverse := 0.0
+        resultText := levelsReady ? "Waiting for Entry" : "Invalid Plan Levels"
+
+    if enabled and captured and not completed and not signalNow and not na(signalBar) and bar_index > signalBar
+        int signalAge = bar_index - signalBar
+
+        if not entryFilled
+            bool entryTouched = not na(trackedEntry) and low <= trackedEntry and high >= trackedEntry
+            if entryTouched
+                entryFilled := true
+                entryBar := bar_index
+                resultText := "Open — Neither Hit"
+
+        if entryFilled
+            float favorableNow = trackedDirection == 1 ? math.max(0.0, high - trackedEntry) : math.max(0.0, trackedEntry - low)
+            float adverseNow = trackedDirection == 1 ? math.max(0.0, trackedEntry - low) : math.max(0.0, high - trackedEntry)
+            maximumFavorable := math.max(maximumFavorable, favorableNow)
+            maximumAdverse := math.max(maximumAdverse, adverseNow)
+
+            bool targetHit = trackedDirection == 1 ? high >= trackedTarget : low <= trackedTarget
+            bool stopHit = trackedDirection == 1 ? low <= trackedStop : high >= trackedStop
+
+            if targetHit and stopHit
+                completed := true
+                resultBar := bar_index
+                resultText := sameBarPriority == "Target First" ? "Target Reached — Same Bar" : "Stop Reached — Same Bar"
+            else if targetHit
+                completed := true
+                resultBar := bar_index
+                resultText := "Target Reached"
+            else if stopHit
+                completed := true
+                resultBar := bar_index
+                resultText := "Stop Reached"
+
+        if not completed and signalAge >= maxTrackingBars
+            completed := true
+            resultBar := bar_index
+            resultText := entryFilled ? "Timed Out — Neither Hit" : "Expired — No Entry"
+
+    int barsHeld = entryFilled and not na(entryBar) ? ((completed and not na(resultBar) ? resultBar : bar_index) - entryBar) : 0
+    float mfeR = not na(trackedRisk) and trackedRisk > 0 ? maximumFavorable / trackedRisk : na
+    float maeR = not na(trackedRisk) and trackedRisk > 0 ? maximumAdverse / trackedRisk : na
+
+    string statusText = not enabled ? "Outcome tracking OFF" : not captured ? "Waiting for BUY / SELL" : completed ? "Outcome Complete" : entryFilled ? "Trade Active" : "Waiting for Entry"
+    color statusColor = not enabled or not captured ? neutralDisplayColor : completed ? (str.contains(resultText, "Target") ? bullDisplayColor : str.contains(resultText, "Stop") ? bearDisplayColor : warningDisplayColor) : entryFilled ? bullDisplayColor : warningDisplayColor
+    string signalText = not captured ? "—" : (trackedDirection == 1 ? "BUY" : "SELL") + " / Signal Bar " + str.tostring(signalBar)
+    color signalColor = not captured ? neutralDisplayColor : trackedDirection == 1 ? bullDisplayColor : bearDisplayColor
+    string planText = not captured or na(trackedEntry) or na(trackedStop) ? "—" : "E " + str.tostring(trackedEntry, format.mintick) + " / SL " + str.tostring(trackedStop, format.mintick)
+    string targetText = not captured or na(trackedTarget) ? "—" : "TP " + str.tostring(trackedTarget, format.mintick) + " / 1:" + str.tostring(rrTarget, "#.##")
+    string entryText = not captured ? "—" : entryFilled and not na(entryBar) ? "Filled / Bar " + str.tostring(entryBar) : completed ? "Not Filled" : "Waiting"
+    string barsHeldText = not captured ? "—" : str.tostring(barsHeld) + " bars"
+    string mfeText = not captured ? "—" : str.tostring(maximumFavorable, format.mintick) + (na(mfeR) ? "" : " / " + str.tostring(mfeR, "#.##") + "R")
+    string maeText = not captured ? "—" : str.tostring(maximumAdverse, format.mintick) + (na(maeR) ? "" : " / " + str.tostring(maeR, "#.##") + "R")
+    string noteText = not enabled ? "Enable outcome tracking in validation settings." : "Bar-based replay; " + sameBarPriority + " resolves same-bar TP / SL."
+    color resultColor = not captured ? neutralDisplayColor : str.contains(resultText, "Target") ? bullDisplayColor : str.contains(resultText, "Stop") ? bearDisplayColor : (str.contains(resultText, "Invalid") or str.contains(resultText, "Expired") or str.contains(resultText, "Timed Out")) ? warningDisplayColor : neutralDisplayColor
+
+    ValidationOutcome.new(captured, statusText, statusColor, signalText, signalColor, planText, targetText, entryText, barsHeldText, mfeText, maeText, resultText, resultColor, noteText)
+
 [validationSnapshotCaptured, validationLastDecisionBar, validationLastDecisionDirection, validationLastDecisionScore, validationLastDecisionGrade, validationLastSignalLiquidity, validationLastSignalDisplacement, validationLastSignalStructure, validationLastSignalOB, validationLastSignalFVG, validationLastSignalOTE, validationLastSignalHTF, validationLastSignalIFAPermission, validationLastIFATrackingEnabled, validationLastDecisionText, validationLastChecklistPrimaryText, validationLastChecklistSecondaryText, validationLastReviewNoteText, validationLastDecisionColor] = validationCaptureSnapshot(enableReplayValidation, decisionLongSignal, decisionShortSignal, decisionScore, decisionGrade, bullLiquidityState, bearLiquidityState, bullDisplacementState, bearDisplacementState, bullStructureState, bearStructureState, bullOBState, bearOBState, bullFVGState, bearFVGState, bullOTEState, bearOTEState, bullHTFState, bearHTFState, institutionalBullFootprintPermission, institutionalBearFootprintPermission, validationTrackIFAPermission, bullColor, bearColor)
 
 [validationLastDecisionFresh, validationLastDecisionAgeText, validationModeDashboardText, validationModeDashboardColor, validationDecisionDashboardText, validationDecisionDashboardColor, validationSnapshotStatusText, validationSnapshotStatusColor, validationSnapshotDirectionText, validationSnapshotScoreGradeText, validationSnapshotBarAgeText, validationSnapshotIFAText, validationSnapshotIFAColor] = validationFormatSnapshot(enableReplayValidation, validationSnapshotCaptured, validationLastDecisionBar, validationLastDecisionDirection, validationLastDecisionScore, validationLastDecisionGrade, validationLastSignalIFAPermission, validationLastIFATrackingEnabled, validationLastDecisionText, validationLastDecisionColor, validationReviewMemoryBars, bullColor, neutralColor, liqColor)
+
+validationOutcome = validationTrackSignalOutcome(enableReplayValidation and validationTrackOutcomes, decisionLongSignal, decisionShortSignal, entryMode, fvgActive, activeOBTop, activeOBBottom, activeFVGTop, activeFVGBottom, atr, stopBufferATR, targetRR, validationOutcomeMaxBars, validationSameBarPriority, bullColor, bearColor, neutralColor, liqColor)
 
 //=============================================================================
 // 13B. MARKET NARRATIVE ENGINE — PR7
@@ -3473,6 +3644,30 @@ isCompact = dashboardMode == "Compact"
 isMinimal = dashboardMode == "Minimal"
 var table dash = table.new(position.top_right, 2, 34, border_width = 1, border_color = color.new(neutralColor, 65))
 
+// VAL PR4 keeps the new outcome page out of the main script body to preserve
+// compiler headroom after the PR3 CE10295 compaction fix.
+renderValidationOutcomePage(targetTable, ValidationOutcome outcome, color panelBackground, color labelColor, color favorableColor, color adverseColor) =>
+    table.cell(targetTable, 0, 2, "Saved Signal", text_color = labelColor, bgcolor = panelBackground)
+    table.cell(targetTable, 1, 2, outcome.signalText, text_color = outcome.signalColor, bgcolor = panelBackground, text_size = size.small)
+    table.cell(targetTable, 0, 3, "Outcome Status", text_color = labelColor, bgcolor = panelBackground)
+    table.cell(targetTable, 1, 3, outcome.statusText, text_color = outcome.statusColor, bgcolor = panelBackground)
+    table.cell(targetTable, 0, 4, "Entry / Stop", text_color = labelColor, bgcolor = panelBackground)
+    table.cell(targetTable, 1, 4, outcome.planText, text_color = outcome.signalColor, bgcolor = panelBackground, text_size = size.tiny)
+    table.cell(targetTable, 0, 5, "Target / RR", text_color = labelColor, bgcolor = panelBackground)
+    table.cell(targetTable, 1, 5, outcome.targetText, text_color = outcome.signalColor, bgcolor = panelBackground, text_size = size.tiny)
+    table.cell(targetTable, 0, 6, "Entry Fill", text_color = labelColor, bgcolor = panelBackground)
+    table.cell(targetTable, 1, 6, outcome.entryText, text_color = outcome.statusColor, bgcolor = panelBackground, text_size = size.tiny)
+    table.cell(targetTable, 0, 7, "Bars Held", text_color = labelColor, bgcolor = panelBackground)
+    table.cell(targetTable, 1, 7, outcome.barsHeldText, text_color = outcome.signalColor, bgcolor = panelBackground)
+    table.cell(targetTable, 0, 8, "MFE", text_color = labelColor, bgcolor = panelBackground)
+    table.cell(targetTable, 1, 8, outcome.mfeText, text_color = favorableColor, bgcolor = panelBackground, text_size = size.tiny)
+    table.cell(targetTable, 0, 9, "MAE", text_color = labelColor, bgcolor = panelBackground)
+    table.cell(targetTable, 1, 9, outcome.maeText, text_color = adverseColor, bgcolor = panelBackground, text_size = size.tiny)
+    table.cell(targetTable, 0, 10, "Replay Result", text_color = labelColor, bgcolor = panelBackground)
+    table.cell(targetTable, 1, 10, outcome.resultText, text_color = outcome.resultColor, bgcolor = panelBackground, text_size = size.small)
+    table.cell(targetTable, 0, 11, "Evaluation Note", text_color = labelColor, bgcolor = panelBackground)
+    table.cell(targetTable, 1, 11, outcome.noteText, text_color = labelColor, bgcolor = panelBackground, text_size = size.tiny)
+
 if barstate.islast
     table.clear(dash, 0, 0, 1, 33)
 
@@ -3496,10 +3691,11 @@ if barstate.islast
             bool replayPageCurrentSetup = replayDashboardPage == "Current Setup"
             bool replayPageChecklist = replayDashboardPage == "Replay Checklist"
             bool replayPageIFAExecution = replayDashboardPage == "IFA + Execution"
-            string replayPageTitle = replayPageCurrentSetup ? "PAGE 1 — CURRENT SETUP" : replayPageChecklist ? "PAGE 2 — REPLAY CHECKLIST" : "PAGE 3 — IFA + EXECUTION"
+            bool replayPageOutcome = replayDashboardPage == "Signal Outcome"
+            string replayPageTitle = replayPageCurrentSetup ? "PAGE 1 — CURRENT SETUP" : replayPageChecklist ? "PAGE 2 — REPLAY CHECKLIST" : replayPageIFAExecution ? "PAGE 3 — IFA + EXECUTION" : "PAGE 4 — SIGNAL OUTCOME"
 
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 VAL PR3 FIX1", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 VAL PR4", text_color = color.white, bgcolor = panelColor, text_size = size.small)
             table.cell(dash, 0, 1, replayPageTitle, text_color = color.white, bgcolor = color.new(color.black, 0), text_size = size.small)
             table.cell(dash, 1, 1, validationModeDashboardText, text_color = validationModeDashboardColor, bgcolor = color.new(color.black, 0), text_size = size.small)
 
@@ -3611,9 +3807,12 @@ if barstate.islast
                 table.cell(dash, 0, 14, "Saved IFA", text_color = neutralColor, bgcolor = panelColor)
                 table.cell(dash, 1, 14, validationSnapshotIFAText, text_color = validationSnapshotIFAColor, bgcolor = panelColor, text_size = size.tiny)
 
+            else if replayPageOutcome
+                renderValidationOutcomePage(dash, validationOutcome, panelColor, neutralColor, bullColor, bearColor)
+
         else if isMorningBrief
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 VAL PR3 FIX1", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 VAL PR4", text_color = color.white, bgcolor = panelColor, text_size = size.small)
             table.cell(dash, 0, 1, "MORNING BRIEF", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 1, "", bgcolor = color.new(color.black, 0))
 
@@ -3646,7 +3845,7 @@ if barstate.islast
 
         else if isExecutionFocus
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 VAL PR3 FIX1", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 VAL PR4", text_color = color.white, bgcolor = panelColor, text_size = size.small)
             table.cell(dash, 0, 1, "EXECUTION FOCUS", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 1, lastDecision, text_color = decisionColor, bgcolor = color.new(color.black, 0), text_size = size.large)
 
@@ -3737,7 +3936,7 @@ if barstate.islast
 
         else if isTradeManagement
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 VAL PR3 FIX1", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 VAL PR4", text_color = color.white, bgcolor = panelColor, text_size = size.small)
             table.cell(dash, 0, 1, "TRADE MANAGEMENT", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 1, lastPlanDirection, text_color = lastPlanDirection == "LONG" ? bullColor : lastPlanDirection == "SHORT" ? bearColor : neutralColor, bgcolor = color.new(color.black, 0), text_size = size.large)
 
@@ -3764,7 +3963,7 @@ if barstate.islast
 
         else if isFull
             table.cell(dash, 0, 0, "ICE GENESIS", text_color = color.white, bgcolor = panelColor, text_size = size.small)
-            table.cell(dash, 1, 0, "v1.0 VAL PR3 FIX1", text_color = color.white, bgcolor = panelColor, text_size = size.small)
+            table.cell(dash, 1, 0, "v1.0 VAL PR4", text_color = color.white, bgcolor = panelColor, text_size = size.small)
 
             table.cell(dash, 0, 1, "FULL DASHBOARD", text_color = color.white, bgcolor = color.new(color.black, 0))
             table.cell(dash, 1, 1, "", bgcolor = color.new(color.black, 0))
